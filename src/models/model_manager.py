@@ -21,15 +21,13 @@ try:
     from transformers import (
         AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForCausalLM,
         T5ForConditionalGeneration, T5Tokenizer,
-        CodeT5Tokenizer, T5ForConditionalGeneration as CodeT5Model,
-        LlamaTokenizer, LlamaForCausalLM,
         pipeline
     )
-    from sentence_transformers import SentenceTransformer
+    # Note: CodeT5 uses the same classes as T5, LlamaTokenizer is now AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     TRANSFORMERS_AVAILABLE = False
-    print("Warning: transformers not installed. Model functionality will be limited.")
+    print(f"Warning: transformers not available: {e}")
 
 
 @dataclass
@@ -97,12 +95,9 @@ class T5BasedModel(BaseModel):
     def load_model(self) -> bool:
         """Load T5 or CodeT5 model"""
         try:
-            if "codet5" in self.config.model_name.lower():
-                self.tokenizer = CodeT5Tokenizer.from_pretrained(self.config.model_path)
-                self.model = CodeT5Model.from_pretrained(self.config.model_path)
-            else:
-                self.tokenizer = T5Tokenizer.from_pretrained(self.config.model_path)
-                self.model = T5ForConditionalGeneration.from_pretrained(self.config.model_path)
+            # Use AutoTokenizer and T5 classes for both T5 and CodeT5
+            self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_path)
+            self.model = T5ForConditionalGeneration.from_pretrained(self.config.model_path)
 
             self.model.to(self.device)
             self.model.eval()
@@ -155,7 +150,12 @@ class LlamaBasedModel(BaseModel):
     def load_model(self) -> bool:
         """Load LLaMA model"""
         try:
-            self.tokenizer = LlamaTokenizer.from_pretrained(self.config.model_path)
+            # Use AutoTokenizer for modern LLaMA models
+            self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_path)
+
+            # Ensure we have a pad token
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
 
             # Load model with quantization options if specified
             load_kwargs = {}
@@ -164,7 +164,7 @@ class LlamaBasedModel(BaseModel):
             elif self.config.load_in_4bit:
                 load_kwargs['load_in_4bit'] = True
 
-            self.model = LlamaForCausalLM.from_pretrained(
+            self.model = AutoModelForCausalLM.from_pretrained(
                 self.config.model_path,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 **load_kwargs
