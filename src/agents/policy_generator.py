@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..core.dsl import RegexDSLParser
-from ..models.model_manager import ModelManager
+from core.dsl import RegexDSLParser
+from models.model_manager import ModelManager
 
 
 @dataclass
