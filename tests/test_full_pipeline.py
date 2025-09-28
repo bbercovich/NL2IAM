@@ -48,7 +48,7 @@ def test_full_pipeline():
         {
             "name": "EC2 with Size Restrictions",
             "natural_language": "Permit launching only small EC2 instances like t2.micro and t2.small"
-        }
+        },
         {
             "name": "corase prompt 10",
             "natural_language": "Requests by any user to attach and detach volumes from instances in the Development department should be allowed.Requests by users to attach and detach their own volumes should be allowed."
