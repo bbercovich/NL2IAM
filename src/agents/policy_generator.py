@@ -148,30 +148,53 @@ Output only valid JSON without markdown formatting:"""
         if text.endswith('```'):
             text = text[:-3]
 
-        # Find JSON object patterns
+        # Remove truncation indicators
+        text = text.replace('...', '')
+
+        # Try parsing entire text as JSON first (most common case)
+        try:
+            policy = json.loads(text)
+            if isinstance(policy, dict) and 'Version' in policy:
+                return policy
+        except json.JSONDecodeError:
+            pass
+
+        # Find complete JSON objects with proper bracket matching
+        brace_count = 0
+        start_pos = -1
+
+        for i, char in enumerate(text):
+            if char == '{':
+                if brace_count == 0:
+                    start_pos = i
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0 and start_pos != -1:
+                    # Found complete JSON object
+                    json_text = text[start_pos:i+1]
+                    try:
+                        policy = json.loads(json_text)
+                        if isinstance(policy, dict) and 'Version' in policy:
+                            return policy
+                    except json.JSONDecodeError:
+                        continue
+
+        # Fallback: regex patterns for partial matches
         json_patterns = [
-            r'\{[^{}]*"Version"[^{}]*\}',  # Simple JSON
-            r'\{.*?"Version".*?\}',       # JSON with nested objects
+            r'\{[^{}]*"Version"[^{}]*"Statement"[^{}]*\}',  # Simple pattern
+            r'\{.*?"Version".*?"Statement".*?\}',           # More flexible
         ]
 
         for pattern in json_patterns:
             matches = re.findall(pattern, text, re.DOTALL)
             for match in matches:
                 try:
-                    # Attempt to parse as JSON
                     policy = json.loads(match)
                     if isinstance(policy, dict) and 'Version' in policy:
                         return policy
                 except json.JSONDecodeError:
                     continue
-
-        # Try parsing entire text as JSON
-        try:
-            policy = json.loads(text)
-            if isinstance(policy, dict):
-                return policy
-        except json.JSONDecodeError:
-            pass
 
         return None
 
