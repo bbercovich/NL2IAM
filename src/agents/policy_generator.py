@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from core.dsl import RegexDSLParser
+from core.dsl import DSLParser
 from models.model_manager import ModelManager
 
 
@@ -36,7 +36,7 @@ class PolicyGenerator:
 
     def __init__(self, model_manager: Optional[ModelManager] = None):
         self.model_manager = model_manager
-        self.dsl_parser = RegexDSLParser()
+        self.dsl_parser = DSLParser()
 
         # RAG placeholder - would connect to AWS docs knowledge base
         self.rag_enabled = False
