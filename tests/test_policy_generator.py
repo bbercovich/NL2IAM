@@ -2,8 +2,7 @@
 """
 Test Policy Generator Agent
 
-Tests the enhanced Policy Generator that uses CodeLlama for DSL→IAM policy generation
-with rule-based fallbacks.
+Tests the simplified Policy Generator that requires CodeLlama model for DSL→IAM generation.
 """
 
 import sys
@@ -18,32 +17,36 @@ from models.model_manager import create_default_manager
 from agents.policy_generator import PolicyGenerator
 
 
-def test_policy_generator_with_model():
+def test_policy_generator():
     """Test Policy Generator with CodeLlama model"""
     print("=" * 60)
-    print(" POLICY GENERATOR WITH MODEL TEST")
+    print(" POLICY GENERATOR TEST")
     print("=" * 60)
     print(f"Test run: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
-        print(f"\n1. Setting up model manager and policy generator...")
+        print(f"\n1. Setting up model manager...")
 
-        # Create model manager and load CodeLlama
+        # Create model manager
         manager = create_default_manager()
-        generator = PolicyGenerator(model_manager=manager)
-
-        print(f"✓ Policy generator created")
+        print(f"✓ Model manager created")
 
         print(f"\n2. Loading CodeLlama model for DSL→Policy generation...")
         success = manager.load_model('dsl2policy_model')
 
         if not success:
-            print(f"✗ Failed to load model - testing rule-based fallback only")
-            return test_policy_generator_rule_based()
+            print(f"✗ Failed to load CodeLlama model")
+            print(f"  Policy Generator requires model to be loaded")
+            print(f"  This is expected behavior - no fallback provided")
+            return False
 
-        print(f"✓ CodeLlama model loaded")
+        print(f"✓ CodeLlama model loaded successfully")
 
-        print(f"\n3. Testing DSL→Policy generation with model...")
+        print(f"\n3. Creating Policy Generator...")
+        generator = PolicyGenerator(model_manager=manager)
+        print(f"✓ Policy Generator created")
+
+        print(f"\n4. Testing DSL→Policy generation...")
 
         # Test cases based on successful CodeLlama results
         test_cases = [
@@ -70,6 +73,12 @@ def test_policy_generator_with_model():
                 "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:* WHERE ec2:InstanceType IN [t2.micro,t2.small]",
                 "expected_action": "ec2:StartInstances",
                 "expected_effect": "Allow"
+            },
+            {
+                "name": "S3 Write Access",
+                "dsl": "ALLOW ACTION:s3:PutObject ON bucket:upload-bucket/*",
+                "expected_action": "s3:PutObject",
+                "expected_effect": "Allow"
             }
         ]
 
@@ -86,7 +95,6 @@ def test_policy_generator_with_model():
             total_time += gen_time
 
             print(f"   ⏱️  Generated in {gen_time:.2f}s")
-            print(f"   📊 Method: {result.method_used}")
             print(f"   🎯 Confidence: {result.confidence_score:.2f}")
 
             if result.success:
@@ -102,98 +110,46 @@ def test_policy_generator_with_model():
 
                 # Show generated policy (truncated)
                 policy_json = json.dumps(policy, indent=2)
-                if len(policy_json) > 200:
-                    policy_json = policy_json[:200] + "..."
+                if len(policy_json) > 300:
+                    policy_json = policy_json[:300] + "..."
                 print(f"   📄 Policy: {policy_json}")
 
                 if result.warnings:
                     print(f"   ⚠️  Warnings: {', '.join(result.warnings)}")
 
             else:
-                print(f"   ✗ FAILED: {', '.join(result.warnings)}")
+                print(f"   ✗ FAILED")
+                for warning in result.warnings:
+                    print(f"     - {warning}")
 
-        print(f"\n4. Generation Results:")
+                # Show raw output for debugging
+                if result.raw_output:
+                    raw_truncated = result.raw_output[:200] + "..." if len(result.raw_output) > 200 else result.raw_output
+                    print(f"   🔍 Raw output: {raw_truncated}")
+
+        print(f"\n5. Generation Results:")
         print(f"   Successful generations: {successful_generations}/{len(test_cases)}")
+        print(f"   Success rate: {successful_generations/len(test_cases)*100:.1f}%")
         print(f"   Average generation time: {total_time/len(test_cases):.2f}s")
         print(f"   Total time: {total_time:.2f}s")
 
-        print(f"\n5. Unloading model...")
+        print(f"\n6. Testing model validation...")
+        # Test what happens when model isn't loaded
         manager.unload_model('dsl2policy_model')
-        print(f"✓ Model unloaded")
+        result = generator.generate_policy("ALLOW ACTION:s3:GetObject ON bucket:test/*")
 
-        return successful_generations > 0
+        if not result.success and "dsl2policy_model is not loaded" in result.warnings[0]:
+            print(f"   ✓ Correctly rejected generation without loaded model")
+        else:
+            print(f"   ✗ Did not properly handle missing model")
+
+        print(f"\n7. Cleanup...")
+        print(f"✓ Test completed")
+
+        return successful_generations >= len(test_cases) * 0.6  # 60% success rate threshold
 
     except Exception as e:
         print(f"✗ Policy generator test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def test_policy_generator_rule_based():
-    """Test Policy Generator with rule-based fallback"""
-    print(f"\n" + "=" * 60)
-    print(f" POLICY GENERATOR RULE-BASED TEST")
-    print(f"=" * 60)
-
-    try:
-        print(f"\n1. Testing rule-based policy generation...")
-
-        # Create generator without model
-        generator = PolicyGenerator(model_manager=None)
-        print(f"✓ Policy generator created (no model)")
-
-        print(f"\n2. Testing rule-based fallback...")
-
-        test_cases = [
-            {
-                "name": "S3 GetObject",
-                "dsl": "ALLOW ACTION:s3:GetObject ON bucket:test-bucket/*",
-                "expected_service": "s3"
-            },
-            {
-                "name": "S3 PutObject",
-                "dsl": "ALLOW ACTION:s3:PutObject ON bucket:upload-bucket/*",
-                "expected_service": "s3"
-            },
-            {
-                "name": "EC2 StartInstances",
-                "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:*",
-                "expected_service": "ec2"
-            }
-        ]
-
-        successful_generations = 0
-
-        for i, test_case in enumerate(test_cases, 1):
-            print(f"\nRule Test {i}: {test_case['name']}")
-            print(f"   DSL: {test_case['dsl']}")
-
-            result = generator.generate_policy(test_case['dsl'])
-
-            print(f"   📊 Method: {result.method_used}")
-            print(f"   🎯 Confidence: {result.confidence_score:.2f}")
-
-            if result.success:
-                print(f"   ✓ SUCCESS")
-                successful_generations += 1
-
-                # Show generated policy
-                policy_json = json.dumps(result.policy, indent=2)
-                print(f"   📄 Policy: {policy_json}")
-
-                if result.warnings:
-                    print(f"   ⚠️  Warnings: {', '.join(result.warnings)}")
-            else:
-                print(f"   ✗ FAILED: {', '.join(result.warnings)}")
-
-        print(f"\n3. Rule-based Results:")
-        print(f"   Successful generations: {successful_generations}/{len(test_cases)}")
-
-        return successful_generations > 0
-
-    except Exception as e:
-        print(f"✗ Rule-based test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -248,35 +204,26 @@ def validate_policy_structure(policy: dict, test_case: dict) -> bool:
 
 
 def main():
-    """Run the Policy Generator tests"""
-    # Test with model first
-    model_success = test_policy_generator_with_model()
-
-    # Test rule-based fallback
-    rule_success = test_policy_generator_rule_based()
-
-    overall_success = model_success or rule_success
+    """Run the Policy Generator test"""
+    success = test_policy_generator()
 
     print(f"\n" + "=" * 60)
     print(f" TEST SUMMARY")
     print(f"=" * 60)
 
-    if model_success:
-        print(f"✓ Model-based policy generation PASSED")
+    if success:
+        print(f"✓ Policy Generator test PASSED")
         print(f"  - CodeLlama successfully generates IAM policies from DSL")
-        print(f"  - Policy structure validation working")
-        print(f"  - Ready for production use")
-    elif rule_success:
-        print(f"✓ Rule-based policy generation PASSED")
-        print(f"  - Fallback templates working correctly")
-        print(f"  - Can generate policies without model")
-        print(f"  - Consider improving model availability")
+        print(f"  - Model validation working correctly")
+        print(f"  - System properly requires model availability")
+        print(f"  - Ready for NL→DSL→Policy pipeline testing")
     else:
-        print(f"✗ All policy generation tests FAILED")
-        print(f"  - Check model loading and DSL parsing")
-        print(f"  - Verify policy templates")
+        print(f"✗ Policy Generator test FAILED")
+        print(f"  - Check CodeLlama model loading")
+        print(f"  - Verify DSL parsing and JSON extraction")
+        print(f"  - Review model generation parameters")
 
-    return overall_success
+    return success
 
 
 if __name__ == "__main__":
