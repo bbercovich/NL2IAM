@@ -1,0 +1,31 @@
+# Core dependencies
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+huggingface-hub>=0.16.0
+accelerate>=0.20.0
+bitsandbytes>=0.39.0  # For quantization support
+
+# DSL parsing
+lark-parser>=1.1.0
+pyparsing>=3.0.0
+
+# RAG and vector search
+faiss-cpu>=1.7.0
+chromadb>=0.4.0
+
+# AWS and JSON validation
+boto3>=1.28.0
+jsonschema>=4.17.0
+
+# Utilities
+pydantic>=2.0.0
+click>=8.1.0
+rich>=13.0.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Development
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
