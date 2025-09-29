@@ -82,9 +82,9 @@ class NLToTranslator:
             dsl_output = self.model_manager.generate(
                 "nl2dsl_model",
                 prompt,
-                max_length=kwargs.get('max_length', 256),
-                temperature=kwargs.get('temperature', 0.3),
-                do_sample=kwargs.get('do_sample', True)
+                max_length=kwargs.get('max_length', 512),
+                temperature=kwargs.get('temperature', 0.1),
+                do_sample=kwargs.get('do_sample', False)
             )
 
             # Clean up the model output
@@ -106,62 +106,43 @@ class NLToTranslator:
 
 
     def _build_model_prompt(self, text: str) -> str:
-        """Build a prompt for the model"""
-        prompt = f"""You are an expert AWS IAM policy translator. Convert natural language requests into precise AWS IAM DSL statements.
+        """Build a prompt for the model using proper chat format"""
+        prompt = f"""<|system|>
+You are an expert AWS IAM policy translator. Convert natural language requests into precise AWS IAM DSL statements.
 
-CRITICAL REQUIREMENTS:
-- Output ONLY the DSL statement(s), no explanations or commentary
-- Use exact DSL syntax as specified in the format rules
-- Handle complex scenarios with multiple conditions and exceptions
-- Ensure proper formatting with numbered statements when multiple rules are needed
+DSL FORMAT:
+- Basic: (ALLOW|DENY) [user:name|role:name|*] [ACTION:service:action|verb] ON [resource:name|*] [WHERE conditions]
+- Actions: service:action format (s3:GetObject) or verbs (READ, WRITE, DELETE)
+- Resources: type:name format (bucket:my-bucket, instance:*)
+- Multiple actions: [action1,action2]
+- Conditions: WHERE key operator value
+- Multi-statement: Number each (1., 2., etc.)
 
-DSL FORMAT RULES:
-- Basic format: (ALLOW|DENY) [role:role_name|user:username|*] [ACTION:action] ON [resource_type:resource_name|*] [WHERE conditions]
-- Actions: Use service:action format (e.g., s3:GetObject, ec2:StartInstances) or generic verbs (READ, WRITE, DELETE)
-- Resources: Use resource_type:resource_name format (e.g., bucket:my-bucket, instance:*) or * for all resources
-- Multiple actions: Use [action1,action2,action3] format
-- Multiple resources: Use [resource1,resource2] format
-- Conditions: WHERE key operator value (e.g., WHERE ec2:InstanceType IN [t2.micro,t2.small])
-- Principal specification: role:rolename, user:username, or * for any user/role
-- Complex conditions: Use AND/OR operators, NOT for negations
-- Case insensitive matching: Use IGNORECASE operator
-- String matching: Use LIKE operator with arrays for multiple patterns
-- Multi-statement policies: Number each statement (1., 2., etc.)
+Output ONLY the DSL statement(s), no explanations.
 
-EXAMPLES:
-Input: "Requests by Alice to read objects in the public bucket should be allowed."
-Output: ALLOW user:alice READ bucket:public-bucket/*
+<|user|>
+Requests by Alice to read objects in the public bucket should be allowed.
 
-Input: "Requests by Bob to delete objects in the audit bucket should be denied."
-Output: DENY user:bob DELETE bucket:audit-bucket/*
+<|assistant|>
+ALLOW user:alice READ bucket:public-bucket/*
 
-Input: "Requests by any user to attach and detach volumes from instances in the Development department should be allowed. Requests by users to attach and detach their own volumes should be allowed."
-Output: 1. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
-2. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON volume:* WHERE ec2:ResourceTag/VolumeUser=${{aws:username}}
+<|user|>
+Requests by Bob to delete objects in the audit bucket should be denied.
 
-Input: "Requests by any user to perform all actions on objects in the example bucket should be allowed only when the request comes from IP address 219.77.225.236 and the referrer is from example.com domains or specified CloudFront distributions. Requests by AWS Lambda should be allowed regardless of conditions. All other requests should be denied."
-Output: 1. ALLOW * ACTION:* ON bucket:example/*
-WHERE aws:Referer LIKE [
-"https://www.example.com/*",
-"https://example.com/*",
-"https://example.herokuapp.com/*",
-"https://dfgdsfgdfg.cloudfront.net/*",
-"https://yygertwgbvcv.cloudfront.net/*"
-]
-AND aws:SourceIp="219.77.225.236"
-2. DENY NOT role:lambda.amazonaws.com ACTION:* ON bucket:example/*
-WHERE NOT aws:Referer LIKE [
-"https://www.example.com/*",
-"https://example.com/*",
-"https://example.herokuapp.com/*",
-"https://dfgdsfgdfg.cloudfront.net/*",
-"https://yygertwgbvcv.cloudfront.net/*"
-]
-AND NOT aws:SourceIp="219.77.225.236"
+<|assistant|>
+DENY user:bob DELETE bucket:audit-bucket/*
 
-Now translate:
-Input: "{text}"
-Output:"""
+<|user|>
+Requests by any user to attach and detach volumes from instances in the Development department should be allowed.
+
+<|assistant|>
+ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
+
+<|user|>
+{text}
+
+<|assistant|>
+"""
 
         return prompt
 

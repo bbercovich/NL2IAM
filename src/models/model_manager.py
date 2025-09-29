@@ -332,7 +332,7 @@ class ModelManager:
 
 
 # Recommended model configurations for RunPod deployment
-RECOMMENDED_MODELS = {
+"""
     "nl2dsl_model": ModelConfig(
         model_name="CodeT5-small",
         model_type="codet5",
@@ -340,6 +340,17 @@ RECOMMENDED_MODELS = {
         model_path="Salesforce/codet5-small",
         max_length=512,
         device="auto"
+    ),
+"""
+RECOMMENDED_MODELS = {
+    "nl2dsl_model": ModelConfig(
+        model_name="CodeLlama-7B",
+        model_type="llama",
+        task="nl2dsl",
+        model_path="codellama/CodeLlama-7b-Instruct-hf",
+        max_length=2048,
+        device="auto",
+        load_in_8bit=True  # For memory efficiency
     ),
     "dsl2policy_model": ModelConfig(
         model_name="CodeLlama-7B",
