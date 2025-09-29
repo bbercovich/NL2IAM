@@ -84,7 +84,8 @@ class NLToTranslator:
                 prompt,
                 max_length=kwargs.get('max_length', 512),
                 temperature=kwargs.get('temperature', 0.1),
-                do_sample=kwargs.get('do_sample', False)
+                do_sample=kwargs.get('do_sample', False),
+                stop_tokens=kwargs.get('stop_tokens', ['<|user|>', '\n\n<|user|>', '<|end|>'])
             )
 
             # Clean up the model output
@@ -118,8 +119,6 @@ DSL FORMAT:
 - Conditions: WHERE key operator value
 - Multi-statement: Number each (1., 2., etc.)
 
-Output ONLY the DSL statement(s), no explanations.
-
 <|user|>
 Requests by Alice to read objects in the public bucket should be allowed.
 
@@ -140,6 +139,8 @@ ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:Resourc
 
 <|user|>
 {text}
+
+Output ONLY the DSL statement(s), no explanations.
 
 <|assistant|>
 """
