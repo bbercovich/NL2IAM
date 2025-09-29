@@ -51,7 +51,12 @@ def test_nl_to_dsl_translation():
         {
             "name": "Complex Multi-Action",
             "natural_language": "Requests by any user to attach and detach volumes from instances in the Development department should be allowed"
+        },
+        {
+            "name": "Prompt 30",
+            "natural_language": "Requests by any user to get objects from examplebucket should be allowed only when the prefix is 'mp3'."
         }
+
     ]
 
     try:
