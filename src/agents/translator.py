@@ -107,25 +107,57 @@ class NLToTranslator:
 
     def _build_model_prompt(self, text: str) -> str:
         """Build a prompt for the model"""
-        prompt = f"""
-Translate the following natural language request into AWS IAM DSL format.
+        prompt = f"""You are an expert AWS IAM policy translator. Convert natural language requests into precise AWS IAM DSL statements.
 
-DSL Format Rules:
-- Use: (ALLOW|DENY) ACTION:<actions> ON <resources> [WHERE <conditions>]
-- Actions: AWS service:action format (e.g., s3:GetObject, ec2:StartInstances)
-- Resources: resource_type:resource_name format (e.g., bucket:my-bucket, instance:*)
-- Multiple actions: [action1,action2,action3]
+CRITICAL REQUIREMENTS:
+- Output ONLY the DSL statement(s), no explanations or commentary
+- Use exact DSL syntax as specified in the format rules
+- Handle complex scenarios with multiple conditions and exceptions
+- Ensure proper formatting with numbered statements when multiple rules are needed
+
+DSL FORMAT RULES:
+- Basic format: (ALLOW|DENY) [role:role_name|user:username|*] [ACTION:action] ON [resource_type:resource_name|*] [WHERE conditions]
+- Actions: Use service:action format (e.g., s3:GetObject, ec2:StartInstances) or generic verbs (READ, WRITE, DELETE)
+- Resources: Use resource_type:resource_name format (e.g., bucket:my-bucket, instance:*) or * for all resources
+- Multiple actions: Use [action1,action2,action3] format
+- Multiple resources: Use [resource1,resource2] format
 - Conditions: WHERE key operator value (e.g., WHERE ec2:InstanceType IN [t2.micro,t2.small])
+- Principal specification: role:rolename, user:username, or * for any user/role
+- Complex conditions: Use AND/OR operators, NOT for negations
+- Case insensitive matching: Use IGNORECASE operator
+- String matching: Use LIKE operator with arrays for multiple patterns
+- Multi-statement policies: Number each statement (1., 2., etc.)
 
-Examples:
-Input: "Allow Alice to read files from the public bucket"
-Output: ALLOW ACTION:s3:GetObject ON bucket:public-bucket/*
+EXAMPLES:
+Input: "Requests by Alice to read objects in the public bucket should be allowed."
+Output: ALLOW user:alice READ bucket:public-bucket/*
 
-Input: "Deny access to delete any S3 objects in the sensitive bucket"
-Output: DENY ACTION:s3:DeleteObject ON bucket:sensitive-bucket/*
+Input: "Requests by Bob to delete objects in the audit bucket should be denied."
+Output: DENY user:bob DELETE bucket:audit-bucket/*
 
-Input: "Allow starting and stopping small EC2 instances"
-Output: ALLOW ACTION:[ec2:StartInstances,ec2:StopInstances] ON instance:* WHERE ec2:InstanceType IN [t2.nano,t2.micro,t2.small]
+Input: "Requests by any user to attach and detach volumes from instances in the Development department should be allowed. Requests by users to attach and detach their own volumes should be allowed."
+Output: 1. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
+2. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON volume:* WHERE ec2:ResourceTag/VolumeUser=${{aws:username}}
+
+Input: "Requests by any user to perform all actions on objects in the example bucket should be allowed only when the request comes from IP address 219.77.225.236 and the referrer is from example.com domains or specified CloudFront distributions. Requests by AWS Lambda should be allowed regardless of conditions. All other requests should be denied."
+Output: 1. ALLOW * ACTION:* ON bucket:example/*
+WHERE aws:Referer LIKE [
+"https://www.example.com/*",
+"https://example.com/*",
+"https://example.herokuapp.com/*",
+"https://dfgdsfgdfg.cloudfront.net/*",
+"https://yygertwgbvcv.cloudfront.net/*"
+]
+AND aws:SourceIp="219.77.225.236"
+2. DENY NOT role:lambda.amazonaws.com ACTION:* ON bucket:example/*
+WHERE NOT aws:Referer LIKE [
+"https://www.example.com/*",
+"https://example.com/*",
+"https://example.herokuapp.com/*",
+"https://dfgdsfgdfg.cloudfront.net/*",
+"https://yygertwgbvcv.cloudfront.net/*"
+]
+AND NOT aws:SourceIp="219.77.225.236"
 
 Now translate:
 Input: "{text}"
