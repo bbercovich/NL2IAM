@@ -89,7 +89,7 @@ class NLToTranslator:
 
             # Clean up the model output
             # Might need some addtonal work here
-            dsl_output = self._clean_model_output(dsl_output)
+            #dsl_output = self._clean_model_output(dsl_output)
 
 
             return TranslationResult(
