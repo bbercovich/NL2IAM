@@ -119,23 +119,10 @@ DSL FORMAT:
 - Conditions: WHERE key operator value
 - Multi-statement: Number each (1., 2., etc.)
 
-<|user|>
-Requests by Alice to read objects in the public bucket should be allowed.
-
-<|assistant|>
-ALLOW user:alice READ bucket:public-bucket/*
-
-<|user|>
-Requests by Bob to delete objects in the audit bucket should be denied.
-
-<|assistant|>
-DENY user:bob DELETE bucket:audit-bucket/*
-
-<|user|>
-Requests by any user to attach and detach volumes from instances in the Development department should be allowed.
-
-<|assistant|>
-ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
+EXAMPLES (do not repeat these):
+Example 1: "Requests by Alice to read objects in the public bucket should be allowed." → ALLOW user:alice READ bucket:public-bucket/*
+Example 2: "Requests by Bob to delete objects in the audit bucket should be denied." → DENY user:bob DELETE bucket:audit-bucket/*
+Example 3: "Requests by any user to attach and detach volumes from instances in the Development department should be allowed." → ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
 
 <|user|>
 {text}
