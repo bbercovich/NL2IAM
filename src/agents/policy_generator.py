@@ -13,6 +13,7 @@ from datetime import datetime
 
 from core.dsl import DSLParser
 from models.model_manager import ModelManager
+from rag.rag_engine import RAGEngine
 
 
 @dataclass
@@ -24,6 +25,8 @@ class PolicyGenerationResult:
     generation_time: float
     warnings: List[str]
     raw_output: str
+    retrieved_contexts: Optional[List[Dict]] = None
+    retrieval_metadata: Optional[Dict] = None
 
 
 class PolicyGenerator:
@@ -31,18 +34,20 @@ class PolicyGenerator:
     Generates AWS IAM policies from DSL statements
     """
 
-    def __init__(self, model_manager: ModelManager):
+    def __init__(self, model_manager: ModelManager, rag_engine: Optional[RAGEngine] = None):
         """
-        Initialize Policy Generator with required model manager
+        Initialize Policy Generator with required model manager and optional RAG engine
 
         Args:
             model_manager: ModelManager instance with loaded models
+            rag_engine: Optional RAG engine for context retrieval
         """
         if model_manager is None:
             raise ValueError("PolicyGenerator requires a ModelManager instance")
 
         self.model_manager = model_manager
         self.dsl_parser = DSLParser()
+        self.rag_engine = rag_engine
 
     def generate_policy(self, dsl_statement: str) -> PolicyGenerationResult:
         """
@@ -77,15 +82,30 @@ class PolicyGenerator:
             )
 
     def _generate_with_model(self, dsl_statement: str, warnings: List[str], start_time: datetime) -> PolicyGenerationResult:
-        """Generate policy using CodeLlama model"""
+        """Generate policy using CodeLlama model with optional RAG enhancement"""
 
-        # Create optimized prompt based on successful test results
-        prompt = f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
+        retrieved_contexts = None
+        retrieval_metadata = None
 
-DSL: {dsl_statement}
+        # Use RAG engine if available to get relevant context
+        if self.rag_engine:
+            try:
+                retrieval_result = self.rag_engine.retrieve_context(dsl_statement)
+                prompt = retrieval_result.augmented_prompt
+                retrieved_contexts = retrieval_result.retrieved_contexts
+                retrieval_metadata = retrieval_result.retrieval_metadata
 
-Generate a complete AWS IAM policy with Version and Statement fields. Use proper AWS ARN format for resources.
-Output only valid JSON without markdown formatting:"""
+                if retrieved_contexts:
+                    warnings.append(f"Used {len(retrieved_contexts)} context chunks from AWS documentation")
+                else:
+                    warnings.append("No relevant context found in AWS documentation")
+
+            except Exception as e:
+                warnings.append(f"RAG context retrieval failed: {e}")
+                prompt = self._create_fallback_prompt(dsl_statement)
+        else:
+            # Create basic prompt without RAG
+            prompt = self._create_fallback_prompt(dsl_statement)
 
         # Generate using CodeLlama with proven parameters
         raw_output = self.model_manager.generate(
@@ -112,7 +132,9 @@ Output only valid JSON without markdown formatting:"""
                 success=True,
                 generation_time=generation_time,
                 warnings=warnings,
-                raw_output=raw_output
+                raw_output=raw_output,
+                retrieved_contexts=retrieved_contexts,
+                retrieval_metadata=retrieval_metadata
             )
         else:
             return PolicyGenerationResult(
@@ -121,7 +143,9 @@ Output only valid JSON without markdown formatting:"""
                 success=False,
                 generation_time=(datetime.now() - start_time).total_seconds(),
                 warnings=warnings + ['Failed to extract valid JSON from model output'],
-                raw_output=raw_output
+                raw_output=raw_output,
+                retrieved_contexts=retrieved_contexts,
+                retrieval_metadata=retrieval_metadata
             )
 
     def _extract_json_from_output(self, raw_output: str) -> Optional[Dict]:
@@ -185,6 +209,15 @@ Output only valid JSON without markdown formatting:"""
                     continue
 
         return None
+
+    def _create_fallback_prompt(self, dsl_statement: str) -> str:
+        """Create fallback prompt when RAG is not available or fails"""
+        return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
+
+DSL: {dsl_statement}
+
+Generate a complete AWS IAM policy with Version and Statement fields. Use proper AWS ARN format for resources.
+Output only valid JSON without markdown formatting:"""
 
     def _validate_policy(self, policy: Dict) -> Dict:
         """Basic validation of generated policy"""
