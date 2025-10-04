@@ -171,18 +171,21 @@ class VectorStoreManager:
             # Generate query embedding
             query_embedding = self.embedding_model.encode([query], convert_to_tensor=False)
 
-            # Build where clause for filtering
-            where_clause = {}
-            if chunk_types:
-                where_clause["chunk_type"] = {"$in": chunk_types}
-            if services:
-                where_clause["service"] = {"$in": services}
+            # Build where clause for filtering - ChromaDB requires single operator
+            where_clause = None
+            if chunk_types and services:
+                # If both filters, prioritize chunk_types (more important)
+                where_clause = {"chunk_type": {"$in": chunk_types}}
+            elif chunk_types:
+                where_clause = {"chunk_type": {"$in": chunk_types}}
+            elif services:
+                where_clause = {"service": {"$in": services}}
 
             # Search in vector store
             results = self.collection.query(
                 query_embeddings=query_embedding.tolist(),
                 n_results=n_results,
-                where=where_clause if where_clause else None,
+                where=where_clause,
                 include=["documents", "metadatas", "distances"]
             )
 

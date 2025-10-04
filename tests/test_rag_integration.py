@@ -73,6 +73,14 @@ def test_context_retrieval(rag_engine):
     for i, dsl_statement in enumerate(test_dsl_statements, 1):
         print(f"\nTest {i}: {dsl_statement}")
 
+        # Debug: Show what DSL components are being extracted
+        dsl_components = rag_engine._parse_dsl_statement(dsl_statement)
+        chunk_types = rag_engine._determine_relevant_chunk_types(dsl_components)
+        services = rag_engine._extract_services_from_dsl(dsl_components)
+        print(f"   DSL components: {dsl_components}")
+        print(f"   Chunk types: {chunk_types}")
+        print(f"   Services: {services}")
+
         result = rag_engine.retrieve_context(dsl_statement, n_results=3)
 
         print(f"   Retrieved contexts: {len(result.retrieved_contexts)}")

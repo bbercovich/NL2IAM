@@ -56,10 +56,9 @@ class RAGEngine:
 
         # DSL parsing patterns for better context retrieval
         self.dsl_patterns = {
-            'action': r'(?:ACTION:)?([a-z0-9\-]+:[A-Z][a-zA-Z0-9\*]+)',
-            'service': r'([a-z0-9\-]+):',
-            'resource': r'(?:ON|bucket:|instance:|role:)([a-zA-Z0-9\-\*\/]+)',
-            'user': r'user:([a-zA-Z0-9\-\*]+)',
+            'action': r'ACTION:([a-z0-9\-]+):([A-Z][a-zA-Z0-9\*]+)',
+            'service_from_action': r'ACTION:([a-z0-9\-]+):',
+            'resource': r'ON\s+([a-z0-9\-]+):([a-zA-Z0-9\-\*\/]+)',
             'condition': r'WHERE\s+([a-zA-Z0-9\-\:]+)',
             'effect': r'^(ALLOW|DENY)'
         }
@@ -197,7 +196,7 @@ class RAGEngine:
         relevant_types = []
 
         # If DSL has specific actions, prioritize action chunks
-        if dsl_components.get('action'):
+        if dsl_components.get('action') or dsl_components.get('service_from_action'):
             relevant_types.append('action')
 
         # If DSL mentions resources, include resource chunks
@@ -215,15 +214,15 @@ class RAGEngine:
         """Extract AWS service names from DSL components"""
         services = set()
 
-        # Extract from actions (service:action format)
-        for action in dsl_components.get('action', []):
-            if ':' in action:
-                service = action.split(':')[0]
-                services.add(service)
-
-        # Extract from service patterns
-        for service in dsl_components.get('service', []):
+        # Extract from ACTION patterns (more precise)
+        for service in dsl_components.get('service_from_action', []):
             services.add(service)
+
+        # Extract from resource patterns
+        for resource_match in dsl_components.get('resource', []):
+            if isinstance(resource_match, tuple) and len(resource_match) >= 1:
+                service = resource_match[0]  # First capture group is service
+                services.add(service)
 
         return list(services) if services else None
 
