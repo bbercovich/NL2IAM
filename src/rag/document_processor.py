@@ -135,11 +135,16 @@ class DocumentProcessor:
     def _extract_action_chunks(self, text: str, page_num: int) -> List[DocumentChunk]:
         """Extract action-related chunks from text"""
         chunks = []
+        seen_contexts = set()  # Avoid duplicate chunks
 
         # Look for action definitions and descriptions
         lines = text.split('\n')
 
         for i, line in enumerate(lines):
+            # Skip very short lines that are unlikely to contain useful info
+            if len(line.strip()) < 10:
+                continue
+
             for pattern in self.action_patterns:
                 matches = re.finditer(pattern, line, re.IGNORECASE)
 
@@ -147,11 +152,21 @@ class DocumentProcessor:
                     service = match.group(1).lower() if match.lastindex >= 1 else None
                     action = match.group(2) if match.lastindex >= 2 else None
 
+                    # Skip if no valid service or action found
+                    if not service or not action:
+                        continue
+
                     # Get surrounding context (3 lines before and after)
                     start_idx = max(0, i - 3)
                     end_idx = min(len(lines), i + 4)
                     context_lines = lines[start_idx:end_idx]
-                    context = '\n'.join(context_lines)
+                    context = '\n'.join(context_lines).strip()
+
+                    # Skip if context is too short or we've seen it before
+                    if len(context) < 50 or context in seen_contexts:
+                        continue
+
+                    seen_contexts.add(context)
 
                     chunk = DocumentChunk(
                         content=context,
@@ -172,14 +187,23 @@ class DocumentProcessor:
     def _extract_resource_chunks(self, text: str, page_num: int) -> List[DocumentChunk]:
         """Extract resource-related chunks from text"""
         chunks = []
+        seen_contexts = set()  # Avoid duplicate chunks
         lines = text.split('\n')
 
         for i, line in enumerate(lines):
+            # Skip very short lines
+            if len(line.strip()) < 10:
+                continue
+
             for pattern in self.resource_patterns:
                 matches = re.finditer(pattern, line, re.IGNORECASE)
 
                 for match in matches:
                     resource_arn = match.group(1) if match.lastindex >= 1 else match.group(0)
+
+                    # Skip if no valid resource found
+                    if not resource_arn or len(resource_arn) < 3:
+                        continue
 
                     # Extract service from ARN if possible
                     service = None
@@ -192,7 +216,13 @@ class DocumentProcessor:
                     start_idx = max(0, i - 3)
                     end_idx = min(len(lines), i + 4)
                     context_lines = lines[start_idx:end_idx]
-                    context = '\n'.join(context_lines)
+                    context = '\n'.join(context_lines).strip()
+
+                    # Skip if context is too short or we've seen it before
+                    if len(context) < 50 or context in seen_contexts:
+                        continue
+
+                    seen_contexts.add(context)
 
                     chunk = DocumentChunk(
                         content=context,
@@ -213,20 +243,35 @@ class DocumentProcessor:
     def _extract_condition_chunks(self, text: str, page_num: int) -> List[DocumentChunk]:
         """Extract condition-related chunks from text"""
         chunks = []
+        seen_contexts = set()  # Avoid duplicate chunks
         lines = text.split('\n')
 
         for i, line in enumerate(lines):
+            # Skip very short lines
+            if len(line.strip()) < 10:
+                continue
+
             for pattern in self.condition_patterns:
                 matches = re.finditer(pattern, line, re.IGNORECASE)
 
                 for match in matches:
                     condition_key = match.group(1) if match.lastindex >= 1 else match.group(0)
 
+                    # Skip if no valid condition key found
+                    if not condition_key or len(condition_key) < 2:
+                        continue
+
                     # Get surrounding context
                     start_idx = max(0, i - 3)
                     end_idx = min(len(lines), i + 4)
                     context_lines = lines[start_idx:end_idx]
-                    context = '\n'.join(context_lines)
+                    context = '\n'.join(context_lines).strip()
+
+                    # Skip if context is too short or we've seen it before
+                    if len(context) < 50 or context in seen_contexts:
+                        continue
+
+                    seen_contexts.add(context)
 
                     chunk = DocumentChunk(
                         content=context,

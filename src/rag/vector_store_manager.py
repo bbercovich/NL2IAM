@@ -71,12 +71,13 @@ class VectorStoreManager:
                 metadata={"description": "AWS IAM documentation chunks"}
             )
 
-    def index_documents(self, chunks: List[DocumentChunk]) -> bool:
+    def index_documents(self, chunks: List[DocumentChunk], batch_size: int = 5000) -> bool:
         """
-        Index document chunks in the vector store.
+        Index document chunks in the vector store in batches.
 
         Args:
             chunks: List of DocumentChunk objects to index
+            batch_size: Number of chunks to process in each batch
 
         Returns:
             True if successful, False otherwise
@@ -86,52 +87,63 @@ class VectorStoreManager:
                 self.logger.warning("No chunks provided for indexing")
                 return False
 
-            self.logger.info(f"Indexing {len(chunks)} document chunks")
+            self.logger.info(f"Indexing {len(chunks)} document chunks in batches of {batch_size}")
 
-            # Prepare data for ChromaDB
-            documents = []
-            metadatas = []
-            ids = []
+            # Process chunks in batches
+            total_processed = 0
+            for batch_start in range(0, len(chunks), batch_size):
+                batch_end = min(batch_start + batch_size, len(chunks))
+                batch_chunks = chunks[batch_start:batch_end]
 
-            for i, chunk in enumerate(chunks):
-                # Create unique ID for each chunk
-                chunk_id = f"{chunk.chunk_type}_{chunk.page_number}_{i}"
+                self.logger.info(f"Processing batch {batch_start//batch_size + 1}: chunks {batch_start+1} to {batch_end}")
 
-                # Prepare document text for embedding
-                document_text = chunk.content
+                # Prepare data for ChromaDB
+                documents = []
+                metadatas = []
+                ids = []
 
-                # Prepare metadata
-                metadata = {
-                    "chunk_type": chunk.chunk_type,
-                    "service": chunk.service or "unknown",
-                    "action_name": chunk.action_name or "",
-                    "resource_type": chunk.resource_type or "",
-                    "condition_key": chunk.condition_key or "",
-                    "page_number": chunk.page_number or 0,
-                }
+                for i, chunk in enumerate(batch_chunks):
+                    # Create unique ID for each chunk
+                    chunk_id = f"{chunk.chunk_type}_{chunk.page_number}_{batch_start + i}"
 
-                # Add original metadata if present
-                if chunk.metadata:
-                    metadata.update({f"original_{k}": str(v) for k, v in chunk.metadata.items()})
+                    # Prepare document text for embedding
+                    document_text = chunk.content
 
-                documents.append(document_text)
-                metadatas.append(metadata)
-                ids.append(chunk_id)
+                    # Prepare metadata
+                    metadata = {
+                        "chunk_type": chunk.chunk_type,
+                        "service": chunk.service or "unknown",
+                        "action_name": chunk.action_name or "",
+                        "resource_type": chunk.resource_type or "",
+                        "condition_key": chunk.condition_key or "",
+                        "page_number": chunk.page_number or 0,
+                    }
 
-            # Generate embeddings
-            self.logger.info("Generating embeddings...")
-            embeddings = self.embedding_model.encode(documents, convert_to_tensor=False)
+                    # Add original metadata if present
+                    if chunk.metadata:
+                        metadata.update({f"original_{k}": str(v) for k, v in chunk.metadata.items()})
 
-            # Add to ChromaDB collection
-            self.logger.info("Adding documents to vector store...")
-            self.collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids,
-                embeddings=embeddings.tolist()
-            )
+                    documents.append(document_text)
+                    metadatas.append(metadata)
+                    ids.append(chunk_id)
 
-            self.logger.info(f"Successfully indexed {len(chunks)} chunks")
+                # Generate embeddings for this batch
+                self.logger.info(f"Generating embeddings for batch of {len(documents)} documents...")
+                embeddings = self.embedding_model.encode(documents, convert_to_tensor=False)
+
+                # Add to ChromaDB collection
+                self.logger.info(f"Adding batch to vector store...")
+                self.collection.add(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids,
+                    embeddings=embeddings.tolist()
+                )
+
+                total_processed += len(batch_chunks)
+                self.logger.info(f"Processed {total_processed}/{len(chunks)} chunks")
+
+            self.logger.info(f"Successfully indexed all {len(chunks)} chunks")
             return True
 
         except Exception as e:
