@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Test script for RAG integration with Policy Generator
 
@@ -12,7 +13,7 @@ import sys
 import logging
 from pathlib import Path
 
-# Add src to path
+# Add src to path (assuming running from project root)
 sys.path.append('src')
 
 from rag.rag_engine import RAGEngine
@@ -29,30 +30,30 @@ def test_rag_engine():
     # Initialize RAG engine
     rag_engine = RAGEngine(vector_store_path="./data/vector_store/")
 
-    # Test knowledge base initialization
-    aws_docs_path = "../docs/iam-ug.pdf"
+    # Test knowledge base initialization (run from project root)
+    aws_docs_path = "./docs/iam-ug.pdf"
 
     if not Path(aws_docs_path).exists():
-        print(f"❌ AWS documentation not found at: {aws_docs_path}")
-        print("Please ensure the AWS IAM User Guide PDF is available.")
+        print(f"ERROR: AWS documentation not found at: {aws_docs_path}")
+        print("Please ensure the AWS IAM User Guide PDF is available and run from project root.")
         return None
 
-    print("📚 Initializing knowledge base with AWS IAM documentation...")
+    print("Initializing knowledge base with AWS IAM documentation...")
     success = rag_engine.initialize_knowledge_base(aws_docs_path)
 
     if success:
-        print("✅ Knowledge base initialized successfully")
+        print("SUCCESS: Knowledge base initialized successfully")
 
         # Show stats
         stats = rag_engine.get_knowledge_base_stats()
-        print(f"📊 Knowledge base stats:")
+        print(f"Knowledge base stats:")
         print(f"   Total chunks: {stats.get('total_chunks', 0)}")
         print(f"   Chunk types: {stats.get('chunk_types', {})}")
         print(f"   Top services: {dict(list(stats.get('services', {}).items())[:5])}")
 
         return rag_engine
     else:
-        print("❌ Failed to initialize knowledge base")
+        print("ERROR: Failed to initialize knowledge base")
         return None
 
 
@@ -70,7 +71,7 @@ def test_context_retrieval(rag_engine):
     ]
 
     for i, dsl_statement in enumerate(test_dsl_statements, 1):
-        print(f"\n🔍 Test {i}: {dsl_statement}")
+        print(f"\nTest {i}: {dsl_statement}")
 
         result = rag_engine.retrieve_context(dsl_statement, n_results=3)
 
@@ -85,7 +86,7 @@ def test_context_retrieval(rag_engine):
                       f"Type: {context['metadata']['chunk_type']})")
                 print(f"      {context['content'][:100]}...")
         else:
-            print("   ⚠️ No relevant contexts found")
+            print("   WARNING: No relevant contexts found")
 
 
 def test_policy_generation_with_rag(rag_engine):
@@ -96,7 +97,7 @@ def test_policy_generation_with_rag(rag_engine):
 
     # Note: This test assumes you have a model manager available
     # For demonstration, we'll create a mock test
-    print("📝 Testing policy generation integration...")
+    print("Testing policy generation integration...")
 
     try:
         # Mock model manager for testing (replace with actual when available)
@@ -112,38 +113,38 @@ def test_policy_generation_with_rag(rag_engine):
         policy_generator = PolicyGenerator(mock_model_manager, rag_engine)
 
         test_dsl = "ALLOW user:alice ACTION:s3:GetObject ON bucket:public-bucket/*"
-        print(f"🔧 Generating policy for: {test_dsl}")
+        print(f"Generating policy for: {test_dsl}")
 
         result = policy_generator.generate_policy(test_dsl)
 
-        print(f"✅ Generation completed:")
+        print(f"Generation completed:")
         print(f"   Success: {result.success}")
         print(f"   Warnings: {len(result.warnings)}")
 
         if result.retrieved_contexts:
             print(f"   RAG contexts used: {len(result.retrieved_contexts)}")
         else:
-            print("   ⚠️ No RAG contexts available")
+            print("   WARNING: No RAG contexts available")
 
         for warning in result.warnings:
-            print(f"   ⚠️ {warning}")
+            print(f"   WARNING: {warning}")
 
     except Exception as e:
-        print(f"❌ Error testing policy generation: {e}")
+        print(f"ERROR: Error testing policy generation: {e}")
 
 
 def main():
     """Main test function"""
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-    print("🚀 RAG Integration Test Suite")
+    print("RAG Integration Test Suite")
     print("Testing AWS IAM Policy Generation with Retrieval-Augmented Generation")
 
     # Test 1: RAG Engine Initialization
     rag_engine = test_rag_engine()
 
     if rag_engine is None:
-        print("\n❌ RAG engine initialization failed. Cannot proceed with tests.")
+        print("\nERROR: RAG engine initialization failed. Cannot proceed with tests.")
         return
 
     # Test 2: Context Retrieval
@@ -153,7 +154,7 @@ def main():
     test_policy_generation_with_rag(rag_engine)
 
     print("\n" + "=" * 60)
-    print("✅ RAG Integration Tests Completed")
+    print("SUCCESS: RAG Integration Tests Completed")
     print("=" * 60)
     print("\nNext steps:")
     print("1. Load your actual models in the ModelManager")
