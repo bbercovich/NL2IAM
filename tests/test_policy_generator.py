@@ -52,33 +52,27 @@ def test_policy_generator():
         test_cases = [
             {
                 "name": "S3 Read Access",
-                "dsl": "ALLOW ACTION:s3:GetObject ON bucket:public-bucket/*",
-                "expected_action": "s3:GetObject",
-                "expected_effect": "Allow"
+                "dsl": "ALLOW ACTION:s3:GetObject ON bucket:public-bucket/*"
             },
             {
                 "name": "S3 Delete Denial",
-                "dsl": "DENY ACTION:s3:DeleteObject ON bucket:sensitive-bucket/*",
-                "expected_action": "s3:DeleteObject",
-                "expected_effect": "Deny"
+                "dsl": "DENY ACTION:s3:DeleteObject ON bucket:sensitive-bucket/*"
             },
             {
                 "name": "EC2 Instance Start",
-                "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:*",
-                "expected_action": "ec2:StartInstances",
-                "expected_effect": "Allow"
+                "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:*"
             },
             {
                 "name": "EC2 with Conditions",
-                "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:* WHERE ec2:InstanceType IN [t2.micro,t2.small]",
-                "expected_action": "ec2:StartInstances",
-                "expected_effect": "Allow"
+                "dsl": "ALLOW ACTION:ec2:StartInstances ON instance:* WHERE ec2:InstanceType IN [t2.micro,t2.small]"
             },
             {
                 "name": "S3 Write Access",
-                "dsl": "ALLOW ACTION:s3:PutObject ON bucket:upload-bucket/*",
-                "expected_action": "s3:PutObject",
-                "expected_effect": "Allow"
+                "dsl": "ALLOW ACTION:s3:PutObject ON bucket:upload-bucket/*"
+            },
+            {
+                "name": "prompt 30",
+                "dsl": "ALLOW user:* READ bucket:examplebucket/* WHERE s3:prefix=mp3"
             }
         ]
 
@@ -95,7 +89,6 @@ def test_policy_generator():
             total_time += gen_time
 
             print(f"   ⏱️  Generated in {gen_time:.2f}s")
-            print(f"   🎯 Confidence: {result.confidence_score:.2f}")
 
             if result.success:
                 print(f"   ✓ SUCCESS")

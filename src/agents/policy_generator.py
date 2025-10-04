@@ -2,8 +2,7 @@
 """
 Policy Generator Agent
 
-Converts DSL statements to AWS IAM policies using CodeLlama model.
-This is a research system focused on testing model-based generation.
+Converts DSL statements to AWS IAM policies
 """
 
 import json
@@ -22,7 +21,6 @@ class PolicyGenerationResult:
     policy: Optional[Dict]
     dsl_statement: str
     success: bool
-    confidence_score: float
     generation_time: float
     warnings: List[str]
     raw_output: str
@@ -30,7 +28,7 @@ class PolicyGenerationResult:
 
 class PolicyGenerator:
     """
-    Generates AWS IAM policies from DSL statements using CodeLlama model
+    Generates AWS IAM policies from DSL statements
     """
 
     def __init__(self, model_manager: ModelManager):
@@ -48,7 +46,7 @@ class PolicyGenerator:
 
     def generate_policy(self, dsl_statement: str) -> PolicyGenerationResult:
         """
-        Generate AWS IAM policy from DSL statement using CodeLlama
+        Generate AWS IAM policy from DSL statement
 
         Args:
             dsl_statement: DSL input like "ALLOW ACTION:s3:GetObject ON bucket:my-bucket/*"
@@ -66,14 +64,6 @@ class PolicyGenerator:
                 "dsl2policy_model is not loaded. Load the model first.",
                 start_time
             )
-
-        # Parse DSL to validate structure (optional validation)
-        try:
-            parsed_dsl = self.dsl_parser.parse(dsl_statement)
-            if not parsed_dsl or not parsed_dsl.statements:
-                warnings.append("DSL parsing failed - proceeding with raw DSL")
-        except Exception as e:
-            warnings.append(f"DSL parsing error: {e} - proceeding with raw DSL")
 
         # Generate with CodeLlama model
         try:
@@ -120,7 +110,6 @@ Output only valid JSON without markdown formatting:"""
                 policy=policy_json,
                 dsl_statement=dsl_statement,
                 success=True,
-                confidence_score=validation_result['confidence'],
                 generation_time=generation_time,
                 warnings=warnings,
                 raw_output=raw_output
@@ -130,7 +119,6 @@ Output only valid JSON without markdown formatting:"""
                 policy=None,
                 dsl_statement=dsl_statement,
                 success=False,
-                confidence_score=0.0,
                 generation_time=(datetime.now() - start_time).total_seconds(),
                 warnings=warnings + ['Failed to extract valid JSON from model output'],
                 raw_output=raw_output
@@ -201,16 +189,13 @@ Output only valid JSON without markdown formatting:"""
     def _validate_policy(self, policy: Dict) -> Dict:
         """Basic validation of generated policy"""
         warnings = []
-        confidence = 1.0
 
         # Check required fields
         if 'Version' not in policy:
             warnings.append("Missing Version field")
-            confidence -= 0.3
 
         if 'Statement' not in policy:
             warnings.append("Missing Statement field")
-            confidence -= 0.5
         else:
             statements = policy['Statement']
             if not isinstance(statements, list):
@@ -219,18 +204,14 @@ Output only valid JSON without markdown formatting:"""
             for i, stmt in enumerate(statements):
                 if 'Effect' not in stmt:
                     warnings.append(f"Statement {i}: Missing Effect")
-                    confidence -= 0.2
 
                 if 'Action' not in stmt:
                     warnings.append(f"Statement {i}: Missing Action")
-                    confidence -= 0.2
 
                 if 'Resource' not in stmt:
                     warnings.append(f"Statement {i}: Missing Resource")
-                    confidence -= 0.2
 
         return {
-            'confidence': max(0.0, confidence),
             'warnings': warnings
         }
 
@@ -244,7 +225,6 @@ Output only valid JSON without markdown formatting:"""
             policy=None,
             dsl_statement=dsl_statement,
             success=False,
-            confidence_score=0.0,
             generation_time=(datetime.now() - start_time).total_seconds(),
             warnings=warnings,
             raw_output=''
