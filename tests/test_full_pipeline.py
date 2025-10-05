@@ -202,6 +202,18 @@ def test_full_pipeline():
                     for warning in policy_result.warnings:
                         print(f"       - {warning}")
 
+                    # Show raw output for debugging JSON extraction failures
+                    if "Failed to extract valid JSON" in str(policy_result.warnings):
+                        print(f"   🔍 Raw model output for debugging:")
+                        raw_output = policy_result.raw_output
+                        if raw_output:
+                            # Show first 500 characters with line breaks visible
+                            debug_output = raw_output[:500].replace('\n', '\\n').replace('\t', '\\t')
+                            print(f"       \"{debug_output}...\"")
+                            print(f"       Output length: {len(raw_output)} characters")
+                        else:
+                            print(f"       No raw output available")
+
             else:
                 print(f"   ✗ Translation failed")
                 if translation_result.reasoning:
