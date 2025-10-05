@@ -164,7 +164,6 @@ def test_full_pipeline():
 
                 if policy_result.success:
                     print(f"   ✓ IAM Policy Generated")
-                    print(f"   🎯 Confidence: {policy_result.confidence_score:.2f}")
 
                     # Display RAG information if available
                     if hasattr(policy_result, 'retrieved_contexts') and policy_result.retrieved_contexts:
@@ -176,6 +175,11 @@ def test_full_pipeline():
                         context_types = [ctx.get('metadata', {}).get('chunk_type', 'unknown') for ctx in policy_result.retrieved_contexts]
                         unique_types = list(set(context_types))
                         print(f"   📋 Context Types: {', '.join(unique_types[:3])}")
+
+                        # Show retrieval metadata if available
+                        if policy_result.retrieval_metadata:
+                            total_searched = policy_result.retrieval_metadata.get('total_documents_searched', 'N/A')
+                            print(f"   🔍 Documents searched: {total_searched}")
                     elif rag_engine:
                         print(f"   📚 RAG: No relevant contexts found")
                     else:
