@@ -145,11 +145,12 @@ def test_full_pipeline():
             if translation_result.dsl_output:
                 print(f"   ✓ DSL Generated")
                 print(f"   🔧 DSL: {translation_result.dsl_output}")
-                print(f"   🎯 Confidence: {translation_result.confidence:.2f}")
                 if translation_result.model_used:
                     print(f"   🤖 Method: {translation_result.model_used}")
                 else:
                     print(f"   📐 Method: Pattern-based")
+                if translation_result.reasoning:
+                    print(f"   💭 Reasoning: {translation_result.reasoning}")
                 successful_translations += 1
 
                 # Step 2: DSL → AWS IAM Policy
