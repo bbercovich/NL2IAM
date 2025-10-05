@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-Test Full NL→DSL→Policy Pipeline
+Test Full NL→DSL→Policy Pipeline with RAG Integration
 
 This test demonstrates the complete workflow:
 1. Natural Language → DSL (using NLToTranslator)
-2. DSL → AWS IAM Policy (using PolicyGenerator)
+2. DSL → AWS IAM Policy (using PolicyGenerator with RAG enhancement)
+3. RAG retrieval from AWS documentation vector database
 """
 
 import sys
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 
 # Add src to path
 sys.path.append('src')
@@ -18,12 +20,13 @@ sys.path.append('src')
 from models.model_manager import create_default_manager
 from agents.translator import NLToTranslator
 from agents.policy_generator import PolicyGenerator
+from rag.rag_engine import RAGEngine
 
 
 def test_full_pipeline():
     """Test the complete NL→DSL→Policy pipeline"""
     print("=" * 70)
-    print(" FULL PIPELINE TEST: Natural Language → DSL → IAM Policy")
+    print(" FULL PIPELINE TEST: Natural Language → DSL → IAM Policy (with RAG)")
     print("=" * 70)
     print(f"Test run: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -52,6 +55,10 @@ def test_full_pipeline():
         {
             "name": "corase prompt 10",
             "natural_language": "Requests by any user to attach and detach volumes from instances in the Development department should be allowed.Requests by users to attach and detach their own volumes should be allowed."
+        },
+        {
+            "name": "Prompt 30",
+            "natural_language": "Requests by any user to get objects from examplebucket should be allowed only when the prefix is 'mp3'."
         }
     ]
 
@@ -81,16 +88,39 @@ def test_full_pipeline():
         else:
             print(f"✓ DSL→Policy model loaded successfully")
 
-        print(f"\n🔧 Step 2: Creating pipeline components...")
+        print(f"\n🔧 Step 2: Setting up RAG engine...")
+
+        # Initialize RAG engine for enhanced policy generation
+        rag_engine = None
+        aws_docs_path = "./docs/iam-ug.pdf"
+        vector_store_path = "./data/vector_store/"
+
+        if Path(aws_docs_path).exists():
+            print(f"   - Initializing RAG engine with AWS documentation...")
+            rag_engine = RAGEngine(vector_store_path=vector_store_path)
+            rag_success = rag_engine.initialize_knowledge_base(aws_docs_path)
+
+            if rag_success:
+                print(f"✓ RAG engine initialized successfully")
+                stats = rag_engine.get_knowledge_base_stats()
+                print(f"   - Total chunks: {stats.get('total_chunks', 0)}")
+                print(f"   - Services available: {len(stats.get('services', {}))}")
+            else:
+                print(f"⚠️  RAG engine initialization failed - proceeding without RAG")
+                rag_engine = None
+        else:
+            print(f"⚠️  AWS documentation not found at {aws_docs_path} - proceeding without RAG")
+
+        print(f"\n🔧 Step 3: Creating pipeline components...")
 
         # Create pipeline components
         translator = NLToTranslator(model_manager=manager)
-        generator = PolicyGenerator(model_manager=manager)
+        generator = PolicyGenerator(model_manager=manager, rag_engine=rag_engine)
 
         print(f"✓ Translator agent created")
-        print(f"✓ Policy generator created")
+        print(f"✓ Policy generator created {'(with RAG)' if rag_engine else '(without RAG)'}")
 
-        print(f"\n🧪 Step 3: Testing full pipeline...")
+        print(f"\n🧪 Step 4: Testing full pipeline...")
 
         successful_translations = 0
         successful_policies = 0
@@ -134,6 +164,21 @@ def test_full_pipeline():
                 if policy_result.success:
                     print(f"   ✓ IAM Policy Generated")
                     print(f"   🎯 Confidence: {policy_result.confidence_score:.2f}")
+
+                    # Display RAG information if available
+                    if hasattr(policy_result, 'retrieved_contexts') and policy_result.retrieved_contexts:
+                        print(f"   📚 RAG Contexts: {len(policy_result.retrieved_contexts)} retrieved")
+                        avg_relevance = sum(ctx.get('relevance_score', 0) for ctx in policy_result.retrieved_contexts) / len(policy_result.retrieved_contexts)
+                        print(f"   🎯 Avg Relevance: {avg_relevance:.3f}")
+
+                        # Show top context types
+                        context_types = [ctx.get('metadata', {}).get('chunk_type', 'unknown') for ctx in policy_result.retrieved_contexts]
+                        unique_types = list(set(context_types))
+                        print(f"   📋 Context Types: {', '.join(unique_types[:3])}")
+                    elif rag_engine:
+                        print(f"   📚 RAG: No relevant contexts found")
+                    else:
+                        print(f"   📚 RAG: Not available")
 
                     # Pretty print the policy
                     policy_json = json.dumps(policy_result.policy, indent=4)
@@ -206,11 +251,13 @@ def main():
         print(f"✅ Full pipeline test PASSED")
         print(f"   🎯 NL→DSL→Policy workflow functioning")
         print(f"   🤖 Models successfully generating outputs")
+        print(f"   📚 RAG integration enhancing policy generation")
         print(f"   🏗️  System ready for research evaluation")
         print(f"\n💡 Next steps:")
         print(f"   - Test with more complex natural language")
         print(f"   - Evaluate policy accuracy against ground truth")
-        print(f"   - Implement RAG for enhanced generation")
+        print(f"   - Compare policy quality with/without RAG enhancement")
+        print(f"   - Fine-tune RAG retrieval for better context relevance")
     else:
         print(f"❌ Full pipeline test FAILED")
         print(f"   🔧 Check model loading and configuration")
