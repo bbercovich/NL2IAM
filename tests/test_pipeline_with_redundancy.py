@@ -22,6 +22,7 @@ from models.model_manager import create_default_manager
 from agents.translator import NLToTranslator
 from agents.policy_generator import PolicyGenerator
 from agents.redundancy_checker import RedundancyChecker
+from agents.conflict_checker import ConflictChecker
 from rag.rag_engine import RAGEngine
 
 
@@ -32,7 +33,7 @@ def test_pipeline_with_redundancy():
     print("=" * 70)
     print(f"Test run: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Test cases that should demonstrate redundancy
+    # Test cases that should demonstrate both redundancy and conflicts
     test_cases = [
         {
             "name": "Initial Broad S3 Access",
@@ -40,8 +41,18 @@ def test_pipeline_with_redundancy():
             "is_baseline": True  # This will be added to inventory first
         },
         {
+            "name": "Bob S3 Delete Access",
+            "natural_language": "Allow Bob to delete files from the sensitive bucket",
+            "is_baseline": True  # This will be added to inventory first
+        },
+        {
             "name": "Specific User S3 Access (Should be Redundant)",
             "natural_language": "Allow Alice to read files from the public bucket",
+            "is_baseline": False
+        },
+        {
+            "name": "Bob S3 Delete Restriction (Should Conflict)",
+            "natural_language": "Deny Bob from deleting files in the sensitive bucket",
             "is_baseline": False
         },
         {
@@ -116,10 +127,12 @@ def test_pipeline_with_redundancy():
         translator = NLToTranslator(model_manager=manager)
         generator = PolicyGenerator(model_manager=manager, rag_engine=rag_engine)
         redundancy_checker = RedundancyChecker(inventory_path="./data/policy_inventory.json")
+        conflict_checker = ConflictChecker(inventory_path="./data/policy_inventory.json")
 
         print(f"✓ Translator agent created")
         print(f"✓ Policy generator created {'(with RAG)' if rag_engine else '(without RAG)'}")
         print(f"✓ Redundancy checker created")
+        print(f"✓ Conflict checker created")
 
         print(f"\n🧪 Step 4: Testing full pipeline with redundancy checking...")
 
@@ -171,48 +184,110 @@ def test_pipeline_with_redundancy():
                     if hasattr(policy_result, 'retrieved_contexts') and policy_result.retrieved_contexts:
                         print(f"   📚 RAG Contexts: {len(policy_result.retrieved_contexts)} retrieved")
 
-                    # Step 3: Redundancy Check
-                    print(f"\n   🔍 Step 3: Checking for redundancy...")
+                    # Step 3: Modular Validation (Redundancy First, Then Conflicts)
+                    print(f"\n   🔍 Step 3a: Checking for redundancy...")
                     redundancy_start = time.time()
 
                     redundancy_result = redundancy_checker.check_redundancy(
                         policy_result.policy,
                         policy_name=test_case['name'],
-                        add_to_inventory=test_case['is_baseline']  # Only add baseline policies
+                        add_to_inventory=False  # Don't add yet, wait for full validation
                     )
 
                     redundancy_time = time.time() - redundancy_start
                     print(f"   ⏱️  Redundancy check time: {redundancy_time:.2f}s")
 
+                    should_check_conflicts = True
                     if redundancy_result.success:
-                        print(f"   ✓ Redundancy check completed")
-                        print(f"   📊 {redundancy_result.summary}")
-
                         if redundancy_result.has_redundancy:
                             redundancy_detected += 1
-                            print(f"   🔍 REDUNDANCY DETAILS:")
+                            print(f"   🔍 REDUNDANCY DETECTED:")
                             for result in redundancy_result.redundancy_results:
                                 print(f"      - Type: {result.redundancy_type}")
                                 print(f"      - Confidence: {result.confidence_score:.2f}")
                                 print(f"      - Explanation: {result.explanation}")
 
-                        if redundancy_result.recommendations:
-                            print(f"   💡 RECOMMENDATIONS:")
-                            for rec in redundancy_result.recommendations:
-                                print(f"      {rec}")
+                            print(f"   📊 {redundancy_result.summary}")
 
-                        # Pretty print the policy
-                        policy_json = json.dumps(policy_result.policy, indent=4)
-                        print(f"   📄 Generated AWS IAM Policy:")
-                        # Show first few lines to keep output manageable
-                        lines = policy_json.split('\\n')
-                        for line in lines[:8]:  # Show first 8 lines
-                            print(f"       {line}")
-                        if len(lines) > 8:
-                            print(f"       ... ({len(lines) - 8} more lines)")
-
+                            # If redundant, we may not need to check conflicts or add to inventory
+                            if test_case['is_baseline']:
+                                print(f"   ⚠️  Baseline policy is redundant - will still be added for testing")
+                                should_check_conflicts = True
+                            else:
+                                print(f"   ℹ️  Policy is redundant - skipping conflict check")
+                                should_check_conflicts = False
+                        else:
+                            print(f"   ✅ No redundancy detected")
+                            print(f"   📊 {redundancy_result.summary}")
                     else:
                         print(f"   ✗ Redundancy check failed: {redundancy_result.error_message}")
+                        should_check_conflicts = False
+
+                    # Step 3b: Check for conflicts if not redundant
+                    conflict_result = None
+                    if should_check_conflicts:
+                        print(f"\n   ⚠️  Step 3b: Checking for conflicts...")
+                        conflict_start = time.time()
+
+                        conflict_result = conflict_checker.check_conflicts(
+                            policy_result.policy,
+                            policy_name=test_case['name']
+                        )
+
+                        conflict_time = time.time() - conflict_start
+                        print(f"   ⏱️  Conflict check time: {conflict_time:.2f}s")
+
+                        if conflict_result.success:
+                            if conflict_result.has_conflicts:
+                                print(f"   ⚠️  CONFLICTS DETECTED:")
+                                print(f"      - Risk Level: {conflict_result.overall_risk_level}")
+                                for result in conflict_result.conflict_results:
+                                    print(f"      - Type: {result.conflict_type}")
+                                    print(f"      - Severity: {result.severity}")
+                                    print(f"      - Confidence: {result.confidence_score:.2f}")
+                                    print(f"      - Explanation: {result.explanation}")
+                            else:
+                                print(f"   ✅ No conflicts detected")
+
+                            print(f"   📊 {conflict_result.summary}")
+                        else:
+                            print(f"   ✗ Conflict check failed: {conflict_result.error_message}")
+                    else:
+                        print(f"\n   ⏭️  Step 3b: Skipping conflict check (policy is redundant)")
+
+                    # Step 3c: Add to inventory if baseline policy
+                    if test_case['is_baseline'] and redundancy_result.success:
+                        print(f"\n   📝 Adding baseline policy to inventory...")
+                        # Add to both inventories to keep them in sync
+                        redundancy_checker.add_existing_policy(
+                            policy_result.policy,
+                            test_case['name']
+                        )
+                        conflict_checker.add_existing_policy(
+                            policy_result.policy,
+                            test_case['name']
+                        )
+                        print(f"   ✓ Baseline policy added to both inventories")
+
+                    # Show combined recommendations
+                    all_recommendations = redundancy_result.recommendations.copy()
+                    if conflict_result and conflict_result.recommendations:
+                        all_recommendations.extend(conflict_result.recommendations)
+
+                    if all_recommendations:
+                        print(f"\n   💡 RECOMMENDATIONS:")
+                        for rec in all_recommendations[:3]:  # Show first 3
+                            print(f"      {rec}")
+
+                    # Pretty print the policy
+                    policy_json = json.dumps(policy_result.policy, indent=4)
+                    print(f"\n   📄 Generated AWS IAM Policy:")
+                    # Show first few lines to keep output manageable
+                    lines = policy_json.split('\\n')
+                    for line in lines[:8]:  # Show first 8 lines
+                        print(f"       {line}")
+                    if len(lines) > 8:
+                        print(f"       ... ({len(lines) - 8} more lines)")
 
                 else:
                     print(f"   ✗ Policy generation failed")

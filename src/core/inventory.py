@@ -30,6 +30,21 @@ class PolicyMetadata:
 
 
 @dataclass
+class ConflictResult:
+    """Result of conflict analysis"""
+    has_conflict: bool
+    conflicting_policy_id: str
+    conflict_type: str  # "allow_vs_deny", "deny_vs_allow", "overlapping_permissions"
+    explanation: str
+    conflicting_statements: List[Tuple[Dict[str, Any], Dict[str, Any]]]  # (new_stmt, existing_stmt)
+    affected_actions: Set[str]
+    affected_resources: Set[str]
+    affected_principals: Set[str]
+    severity: str  # "high", "medium", "low"
+    confidence_score: float  # 0.0 to 1.0
+
+
+@dataclass
 class RedundancyResult:
     """Result of redundancy analysis"""
     is_redundant: bool
@@ -172,27 +187,45 @@ class PolicyInventory:
         """Find all policies that reference a specific principal"""
         return self.principal_index.get(principal, set()).copy()
 
-    def find_conflicting_policies(self, new_policy: Dict[str, Any]) -> List[Tuple[str, str]]:
+    def find_conflicting_policies(self, new_policy: Dict[str, Any]) -> List[ConflictResult]:
         """
         Find policies that conflict with a new policy.
 
         A conflict occurs when:
         - One policy ALLOWs and another DENIEs the same action on the same resource
         - Same action/resource combination has contradictory effects
+        - Overlapping permissions with different effects
 
         Args:
             new_policy: The new policy to check for conflicts
 
         Returns:
-            List of (policy_id, conflict_reason) tuples
+            List of ConflictResult objects with detailed analysis
         """
-        conflicts = []
+        conflict_results = []
         new_indexed = self._index_policy("temp", PolicyMetadata("temp", "temp"), new_policy)
 
         for policy_id, existing_policy in self.policies.items():
-            conflict_reason = self._check_policy_conflict(new_indexed, existing_policy)
-            if conflict_reason:
-                conflicts.append((policy_id, conflict_reason))
+            conflict_result = self._analyze_policy_conflicts(new_indexed, existing_policy)
+            if conflict_result.has_conflict:
+                conflict_result.conflicting_policy_id = policy_id
+                conflict_results.append(conflict_result)
+
+        return conflict_results
+
+    def find_conflicting_policies_legacy(self, new_policy: Dict[str, Any]) -> List[Tuple[str, str]]:
+        """
+        Legacy method for backward compatibility.
+        Find policies that conflict with a new policy.
+
+        Returns:
+            List of (policy_id, conflict_reason) tuples
+        """
+        conflicts = []
+        conflict_results = self.find_conflicting_policies(new_policy)
+
+        for result in conflict_results:
+            conflicts.append((result.conflicting_policy_id, result.explanation))
 
         return conflicts
 
@@ -239,6 +272,90 @@ class PolicyInventory:
             "policies_with_deny": deny_count,
             "sources": self._get_source_breakdown()
         }
+
+    def generate_conflict_report(self, new_policy: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate a comprehensive conflict report for a new policy.
+
+        Args:
+            new_policy: The policy to check for conflicts
+
+        Returns:
+            Dictionary containing detailed conflict analysis
+        """
+        conflict_results = self.find_conflicting_policies(new_policy)
+
+        report = {
+            "new_policy": new_policy,
+            "total_existing_policies": len(self.policies),
+            "conflicting_policies_found": len(conflict_results),
+            "conflict_details": [],
+            "recommendations": [],
+            "overall_risk_level": "none"
+        }
+
+        if not conflict_results:
+            report["recommendations"].append("✅ No conflicts detected. Policy can be safely created.")
+            return report
+
+        # Determine overall risk level
+        risk_levels = [result.severity for result in conflict_results]
+        if "high" in risk_levels:
+            report["overall_risk_level"] = "high"
+        elif "medium" in risk_levels:
+            report["overall_risk_level"] = "medium"
+        else:
+            report["overall_risk_level"] = "low"
+
+        for result in conflict_results:
+            existing_policy = self.get_policy(result.conflicting_policy_id)
+            existing_metadata = self.get_policy_metadata(result.conflicting_policy_id)
+
+            detail = {
+                "conflicting_policy_id": result.conflicting_policy_id,
+                "conflicting_policy_name": existing_metadata.name if existing_metadata else "Unknown",
+                "conflict_type": result.conflict_type,
+                "explanation": result.explanation,
+                "severity": result.severity,
+                "confidence_score": result.confidence_score,
+                "affected_actions": list(result.affected_actions),
+                "affected_resources": list(result.affected_resources),
+                "affected_principals": list(result.affected_principals),
+                "existing_policy": existing_policy
+            }
+            report["conflict_details"].append(detail)
+
+            # Generate recommendations based on conflict type and severity
+            policy_name = existing_metadata.name if existing_metadata else result.conflicting_policy_id[:8]
+
+            if result.severity == "high":
+                report["recommendations"].append(
+                    f"⚠️  HIGH RISK: Policy conflicts with '{policy_name}' on critical permissions. "
+                    f"Review carefully before deployment as this may cause security issues."
+                )
+            elif result.severity == "medium":
+                report["recommendations"].append(
+                    f"⚠️  MEDIUM RISK: Policy conflicts with '{policy_name}'. "
+                    f"Verify that conflicting permissions are intended."
+                )
+            else:
+                report["recommendations"].append(
+                    f"ℹ️  LOW RISK: Minor conflict with '{policy_name}'. "
+                    f"Consider reviewing for consistency."
+                )
+
+            if result.conflict_type == "allow_vs_deny":
+                report["recommendations"].append(
+                    f"📝 New policy grants permissions that '{policy_name}' explicitly denies. "
+                    f"This may create unexpected access patterns."
+                )
+            elif result.conflict_type == "deny_vs_allow":
+                report["recommendations"].append(
+                    f"📝 New policy denies permissions that '{policy_name}' allows. "
+                    f"This may block expected access."
+                )
+
+        return report
 
     def generate_redundancy_report(self, new_policy: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -430,6 +547,221 @@ class PolicyInventory:
                     return f"Deny vs Allow conflict on overlapping permissions"
 
         return None
+
+    def _analyze_policy_conflicts(
+        self,
+        new_policy: IndexedPolicy,
+        existing_policy: IndexedPolicy
+    ) -> ConflictResult:
+        """
+        Comprehensive conflict analysis between two policies.
+
+        Analyzes multiple types of conflicts:
+        1. Allow vs Deny conflicts
+        2. Deny vs Allow conflicts
+        3. Overlapping permissions with different effects
+        4. Principal/resource/action overlaps
+        """
+        conflicting_statements = []
+        affected_actions = set()
+        affected_resources = set()
+        affected_principals = set()
+        conflict_types = []
+
+        # Check for Allow vs Deny conflicts
+        for new_allow in new_policy.allow_statements:
+            for existing_deny in existing_policy.deny_statements:
+                if self._statements_overlap(new_allow, existing_deny):
+                    conflicting_statements.append((new_allow, existing_deny))
+                    conflict_types.append("allow_vs_deny")
+
+                    # Track affected elements
+                    self._add_statement_elements_to_sets(
+                        new_allow, affected_actions, affected_resources, affected_principals
+                    )
+
+        # Check for Deny vs Allow conflicts
+        for new_deny in new_policy.deny_statements:
+            for existing_allow in existing_policy.allow_statements:
+                if self._statements_overlap(new_deny, existing_allow):
+                    conflicting_statements.append((new_deny, existing_allow))
+                    conflict_types.append("deny_vs_allow")
+
+                    # Track affected elements
+                    self._add_statement_elements_to_sets(
+                        new_deny, affected_actions, affected_resources, affected_principals
+                    )
+
+        if not conflicting_statements:
+            return ConflictResult(
+                has_conflict=False,
+                conflicting_policy_id="",
+                conflict_type="none",
+                explanation="No conflicts detected",
+                conflicting_statements=[],
+                affected_actions=set(),
+                affected_resources=set(),
+                affected_principals=set(),
+                severity="none",
+                confidence_score=0.0
+            )
+
+        # Determine primary conflict type
+        primary_conflict_type = conflict_types[0] if conflict_types else "overlapping_permissions"
+
+        # Generate explanation
+        explanation = self._generate_conflict_explanation(
+            conflicting_statements, primary_conflict_type, affected_actions,
+            affected_resources, affected_principals
+        )
+
+        # Determine severity
+        severity = self._determine_conflict_severity(
+            conflicting_statements, affected_actions, affected_resources, affected_principals
+        )
+
+        # Calculate confidence score
+        confidence_score = self._calculate_conflict_confidence(conflicting_statements)
+
+        return ConflictResult(
+            has_conflict=True,
+            conflicting_policy_id=existing_policy.policy_id,
+            conflict_type=primary_conflict_type,
+            explanation=explanation,
+            conflicting_statements=conflicting_statements,
+            affected_actions=affected_actions,
+            affected_resources=affected_resources,
+            affected_principals=affected_principals,
+            severity=severity,
+            confidence_score=confidence_score
+        )
+
+    def _add_statement_elements_to_sets(
+        self,
+        statement: Dict[str, Any],
+        actions: set,
+        resources: set,
+        principals: set
+    ) -> None:
+        """Extract and add statement elements to tracking sets"""
+        # Add actions
+        stmt_actions = self._normalize_field(statement.get("Action", []))
+        actions.update(stmt_actions)
+
+        # Add resources
+        stmt_resources = self._normalize_field(statement.get("Resource", []))
+        resources.update(stmt_resources)
+
+        # Add principals
+        stmt_principals = self._extract_principals(statement.get("Principal", {}))
+        principals.update(stmt_principals)
+
+    def _generate_conflict_explanation(
+        self,
+        conflicting_statements: List[Tuple[Dict[str, Any], Dict[str, Any]]],
+        conflict_type: str,
+        affected_actions: Set[str],
+        affected_resources: Set[str],
+        affected_principals: Set[str]
+    ) -> str:
+        """Generate human-readable explanation of the conflict"""
+        if not conflicting_statements:
+            return "No conflicts detected"
+
+        new_stmt, existing_stmt = conflicting_statements[0]
+
+        # Get the overlapping elements
+        overlapping_actions = list(affected_actions)[:3]  # Show first 3
+        overlapping_resources = list(affected_resources)[:3]
+        overlapping_principals = list(affected_principals)[:3]
+
+        if conflict_type == "allow_vs_deny":
+            base_explanation = "New policy ALLOWS actions that existing policy DENIES"
+        elif conflict_type == "deny_vs_allow":
+            base_explanation = "New policy DENIES actions that existing policy ALLOWS"
+        else:
+            base_explanation = "Policies have conflicting effects on overlapping permissions"
+
+        details = []
+
+        if overlapping_actions:
+            actions_str = ", ".join(overlapping_actions)
+            if len(affected_actions) > 3:
+                actions_str += f" (and {len(affected_actions) - 3} more)"
+            details.append(f"Actions: {actions_str}")
+
+        if overlapping_resources:
+            resources_str = ", ".join(overlapping_resources)
+            if len(affected_resources) > 3:
+                resources_str += f" (and {len(affected_resources) - 3} more)"
+            details.append(f"Resources: {resources_str}")
+
+        if overlapping_principals:
+            principals_str = ", ".join(overlapping_principals)
+            if len(affected_principals) > 3:
+                principals_str += f" (and {len(affected_principals) - 3} more)"
+            details.append(f"Principals: {principals_str}")
+
+        if details:
+            return f"{base_explanation}. Affected: {'; '.join(details)}"
+        else:
+            return base_explanation
+
+    def _determine_conflict_severity(
+        self,
+        conflicting_statements: List[Tuple[Dict[str, Any], Dict[str, Any]]],
+        affected_actions: Set[str],
+        affected_resources: Set[str],
+        affected_principals: Set[str]
+    ) -> str:
+        """Determine the severity of the conflict"""
+        # High severity criteria
+        if "*" in affected_actions or "*" in affected_resources or "*" in affected_principals:
+            return "high"
+
+        # Check for high-risk actions
+        high_risk_actions = {
+            "iam:*", "iam:CreateRole", "iam:DeleteRole", "iam:AttachRolePolicy",
+            "s3:DeleteBucket", "ec2:TerminateInstances", "*"
+        }
+
+        if any(action in high_risk_actions for action in affected_actions):
+            return "high"
+
+        # Medium severity: multiple statements or multiple affected elements
+        if len(conflicting_statements) > 1 or len(affected_actions) > 2:
+            return "medium"
+
+        return "low"
+
+    def _calculate_conflict_confidence(
+        self,
+        conflicting_statements: List[Tuple[Dict[str, Any], Dict[str, Any]]]
+    ) -> float:
+        """Calculate confidence score for conflict detection"""
+        if not conflicting_statements:
+            return 0.0
+
+        # Base confidence for any conflict
+        confidence = 0.7
+
+        # Higher confidence for exact matches
+        for new_stmt, existing_stmt in conflicting_statements:
+            new_actions = set(self._normalize_field(new_stmt.get("Action", [])))
+            existing_actions = set(self._normalize_field(existing_stmt.get("Action", [])))
+
+            new_resources = set(self._normalize_field(new_stmt.get("Resource", [])))
+            existing_resources = set(self._normalize_field(existing_stmt.get("Resource", [])))
+
+            # Exact action match increases confidence
+            if new_actions == existing_actions:
+                confidence += 0.15
+
+            # Exact resource match increases confidence
+            if new_resources == existing_resources:
+                confidence += 0.15
+
+        return min(confidence, 1.0)
 
     def _analyze_policy_redundancy(
         self,
