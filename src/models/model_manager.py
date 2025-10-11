@@ -461,7 +461,7 @@ RECOMMENDED_MODELS = {
         max_tokens=512,
         temperature=0.1
     ),
-    "nl2dsl": ModelConfig(
+    "nl2dsl_model": ModelConfig(
         model_name="GPT-4o",
         model_type="openai",
         task="nl2dsl",
