@@ -344,6 +344,15 @@ class ModelManager:
 """
 RECOMMENDED_MODELS = {
     "nl2dsl_model": ModelConfig(
+        model_name="Llama-3.3-70B",
+        model_type="llama",
+        task="nl2dsl",
+        model_path="meta-llama/Llama-3.3-70B-Instruct",
+        max_length=2048,
+        device="auto",
+        load_in_4bit=True  # Use 4-bit quantization for 70B model
+    ),
+    "nl2dsl_model_codellama": ModelConfig(
         model_name="CodeLlama-7B",
         model_type="llama",
         task="nl2dsl",
