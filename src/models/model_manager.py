@@ -29,12 +29,19 @@ except ImportError as e:
     TRANSFORMERS_AVAILABLE = False
     print(f"Warning: transformers not available: {e}")
 
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError as e:
+    OPENAI_AVAILABLE = False
+    print(f"Warning: OpenAI not available: {e}")
+
 
 @dataclass
 class ModelConfig:
     """Configuration for a model"""
     model_name: str
-    model_type: str  # "bert", "t5", "codet5", "llama", "mistral"
+    model_type: str  # "bert", "t5", "codet5", "llama", "mistral", "openai"
     task: str  # "nl2dsl", "dsl2policy"
     model_path: str
     tokenizer_path: Optional[str] = None
@@ -43,6 +50,10 @@ class ModelConfig:
     load_in_8bit: bool = False
     load_in_4bit: bool = False
     trust_remote_code: bool = False
+    # OpenAI specific parameters
+    api_key: Optional[str] = None
+    temperature: float = 0.7
+    max_tokens: int = 512
 
 
 class BaseModel(ABC):
@@ -218,6 +229,66 @@ class LlamaBasedModel(BaseModel):
         return output_text.strip()
 
 
+class OpenAIModel(BaseModel):
+    """OpenAI API-based model for remote inference"""
+
+    def __init__(self, config: ModelConfig):
+        super().__init__(config)
+        self.client = None
+        self.logger = logging.getLogger(__name__)
+
+    def load_model(self) -> bool:
+        """Initialize OpenAI client"""
+        try:
+            if not OPENAI_AVAILABLE:
+                raise RuntimeError("OpenAI client not available. Run: pip install openai")
+
+            # Get API key from config or environment
+            api_key = self.config.api_key or os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable or provide in config.")
+
+            self.client = OpenAI(api_key=api_key)
+            self.is_loaded = True
+            return True
+
+        except Exception as e:
+            print(f"Error initializing OpenAI client: {e}")
+            return False
+
+    def generate(self, input_text: str, **kwargs) -> str:
+        """Generate output using OpenAI API"""
+        if not self.is_loaded:
+            raise ValueError("OpenAI client not initialized")
+
+        # Default generation parameters
+        temperature = kwargs.get('temperature', self.config.temperature)
+        max_tokens = kwargs.get('max_tokens', self.config.max_tokens)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.config.model_path,  # e.g., "gpt-4", "gpt-3.5-turbo"
+                messages=[{"role": "user", "content": input_text}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            return response.choices[0].message.content.strip()
+
+        except Exception as e:
+            self.logger.error(f"OpenAI API call failed: {e}")
+            raise
+
+    def unload_model(self):
+        """Cleanup OpenAI client"""
+        self.client = None
+        self.is_loaded = False
+
+    def _get_device(self) -> str:
+        """OpenAI models run remotely, no local device needed"""
+        return "remote"
+
+
 class ModelManager:
     """
     Manages multiple models for the NL2IAM system.
@@ -247,6 +318,8 @@ class ModelManager:
             model = T5BasedModel(config)
         elif config.model_type in ["llama", "mistral"]:
             model = LlamaBasedModel(config)
+        elif config.model_type == "openai":
+            model = OpenAIModel(config)
         else:
             raise ValueError(f"Unsupported model type: {config.model_type}")
 
@@ -352,7 +425,7 @@ RECOMMENDED_MODELS = {
         device="auto",
         load_in_8bit=True  # For memory efficiency
     ),
-    "nl2dsl_model": ModelConfig(
+    "nl2dsl_model_llama33_70b": ModelConfig(
         model_name="Llama-3.3-70B",
         model_type="llama",
         task="nl2dsl",
@@ -378,6 +451,31 @@ RECOMMENDED_MODELS = {
         max_length=2048,
         device="auto",
         load_in_8bit=True  # For memory efficiency
+    ),
+    # OpenAI Models
+    "nl2dsl_openai_gpt4": ModelConfig(
+        model_name="GPT-4",
+        model_type="openai",
+        task="nl2dsl",
+        model_path="gpt-4",
+        max_tokens=512,
+        temperature=0.1
+    ),
+    "nl2dsl": ModelConfig(
+        model_name="GPT-4o",
+        model_type="openai",
+        task="nl2dsl",
+        model_path="gpt-4o",
+        max_tokens=512,
+        temperature=0.1
+    ),
+    "nl2dsl_openai_gpt35": ModelConfig(
+        model_name="GPT-3.5-Turbo",
+        model_type="openai",
+        task="nl2dsl",
+        model_path="gpt-3.5-turbo",
+        max_tokens=512,
+        temperature=0.1
     )
 }
 
