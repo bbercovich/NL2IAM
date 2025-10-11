@@ -343,7 +343,7 @@ class ModelManager:
     ),
 """
 RECOMMENDED_MODELS = {
-    "nl2dsl_model": ModelConfig(
+    "nl2dsl_model_llama31_8b": ModelConfig(
         model_name="Llama-3.1-8B",
         model_type="llama",
         task="nl2dsl",
@@ -352,7 +352,7 @@ RECOMMENDED_MODELS = {
         device="auto",
         load_in_8bit=True  # For memory efficiency
     ),
-    "nl2dsl_model_llama33_70b": ModelConfig(
+    "nl2dsl_model": ModelConfig(
         model_name="Llama-3.3-70B",
         model_type="llama",
         task="nl2dsl",
