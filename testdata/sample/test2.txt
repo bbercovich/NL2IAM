@@ -1,0 +1,1 @@
+Deny all users from deleting objects in the audit-logs bucket

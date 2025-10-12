@@ -1,0 +1,1 @@
+Allow role DataScientist to launch t2.micro and t2.small EC2 instances

@@ -49,11 +49,16 @@ class NL2IAMSession:
     """Manages a single CLI session with state and configurations"""
 
     def __init__(self, debug_mode: bool = False, inventory_path: Optional[str] = None,
-                 use_rag: bool = True, skip_validation: bool = False):
+                 use_rag: bool = True, skip_validation: bool = False,
+                 batch_mode: bool = False, input_dir: Optional[str] = None,
+                 output_dir: Optional[str] = None):
         self.debug_mode = debug_mode
         self.inventory_path = inventory_path or "./data/policy_inventory.json"
         self.use_rag = use_rag
         self.skip_validation = skip_validation
+        self.batch_mode = batch_mode
+        self.input_dir = input_dir
+        self.output_dir = output_dir
 
         # Pipeline components
         self.model_manager = None
@@ -66,6 +71,7 @@ class NL2IAMSession:
         # Session state
         self.initialized = False
         self.policies_created = 0
+        self.batch_results = []
 
         # Setup logging
         logging.basicConfig(
@@ -240,6 +246,118 @@ class NL2IAMSession:
         print(f"   Policies created: {self.policies_created}")
         print(f"   Debug mode: {'On' if self.debug_mode else 'Off'}")
         print("👋 Thank you for using NL2IAM!")
+
+    def run_batch_processing(self):
+        """Run batch processing on input directory"""
+        if not self.initialized:
+            print("❌ Session not initialized. Call initialize() first.")
+            return False
+
+        if not self.input_dir:
+            print("❌ Input directory not specified for batch processing.")
+            return False
+
+        if not Path(self.input_dir).exists():
+            print(f"❌ Input directory does not exist: {self.input_dir}")
+            return False
+
+        if self.output_dir:
+            output_path = Path(self.output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+            print(f"📁 Output directory: {self.output_dir}")
+
+        print("\n" + "=" * 60)
+        print("🚀 NL2IAM Batch Processing Mode")
+        print("=" * 60)
+        print(f"📂 Input directory: {self.input_dir}")
+        if not self.use_rag:
+            print("🚫 RAG disabled")
+        if self.skip_validation:
+            print("⚠️  Validation disabled")
+        print()
+
+        # Get all text files from input directory
+        input_path = Path(self.input_dir)
+        text_files = []
+        for ext in ['*.txt', '*.md', '*.json']:
+            text_files.extend(input_path.glob(ext))
+
+        if not text_files:
+            print(f"❌ No text files found in {self.input_dir}")
+            return False
+
+        print(f"📋 Found {len(text_files)} files to process")
+        print("-" * 40)
+
+        total_files = len(text_files)
+        successful = 0
+        failed = 0
+
+        for i, file_path in enumerate(text_files, 1):
+            print(f"\n🔄 Processing [{i}/{total_files}]: {file_path.name}")
+
+            try:
+                # Read file content
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+
+                if not content:
+                    print(f"⚠️  Skipping empty file: {file_path.name}")
+                    continue
+
+                if len(content) < 10:
+                    print(f"⚠️  Skipping file with content too short: {file_path.name}")
+                    continue
+
+                # Process the content
+                result = self.process_policy_request_batch(content, file_path.stem)
+
+                if result['success']:
+                    successful += 1
+                    print(f"✅ Success: {file_path.name}")
+
+                    # Save to output directory if specified
+                    if self.output_dir:
+                        output_filename = f"generated_{file_path.stem}.json"
+                        output_file_path = Path(self.output_dir) / output_filename
+
+                        with open(output_file_path, 'w', encoding='utf-8') as f:
+                            json.dump(result['policy'], f, indent=2)
+                        print(f"💾 Saved: {output_filename}")
+                else:
+                    failed += 1
+                    print(f"❌ Failed: {file_path.name} - {result.get('error', 'Unknown error')}")
+
+                self.batch_results.append({
+                    'filename': file_path.name,
+                    'success': result['success'],
+                    'policy': result.get('policy'),
+                    'error': result.get('error'),
+                    'generation_time': result.get('generation_time', 0)
+                })
+
+            except Exception as e:
+                failed += 1
+                print(f"❌ Error processing {file_path.name}: {e}")
+                self.batch_results.append({
+                    'filename': file_path.name,
+                    'success': False,
+                    'error': str(e)
+                })
+
+        # Print summary
+        print("\n" + "=" * 60)
+        print("📊 BATCH PROCESSING SUMMARY")
+        print("=" * 60)
+        print(f"📁 Total files processed: {total_files}")
+        print(f"✅ Successful: {successful}")
+        print(f"❌ Failed: {failed}")
+        print(f"📈 Success rate: {(successful/total_files*100):.1f}%")
+
+        if self.output_dir:
+            print(f"📂 Output saved to: {self.output_dir}")
+
+        return successful > 0
 
     def show_help(self):
         """Display help information"""
@@ -489,6 +607,103 @@ class NL2IAMSession:
             print(f"❌ Failed to add policy to inventory: {e}")
             return False
 
+    def process_policy_request_batch(self, natural_language: str, filename: str) -> Dict[str, Any]:
+        """
+        Process a policy request in batch mode (non-interactive)
+
+        Args:
+            natural_language: The natural language input
+            filename: Original filename for naming
+
+        Returns:
+            Dictionary with success status, policy, and metadata
+        """
+        start_time = datetime.now()
+
+        try:
+            # Step 1: Natural Language → DSL
+            translation_result = self.translator.translate(natural_language)
+            if not translation_result or not translation_result.dsl_output:
+                return {
+                    'success': False,
+                    'error': 'Failed to translate natural language to DSL',
+                    'generation_time': (datetime.now() - start_time).total_seconds()
+                }
+
+            dsl_output = translation_result.dsl_output
+
+            # Step 2: DSL → AWS IAM Policy
+            policy_result = self.policy_generator.generate_policy(dsl_output)
+            if not policy_result.success:
+                return {
+                    'success': False,
+                    'error': f"Failed to generate IAM policy: {'; '.join(policy_result.warnings)}",
+                    'generation_time': (datetime.now() - start_time).total_seconds()
+                }
+
+            candidate_policy = policy_result.policy
+
+            # Step 3-4: Validation (if enabled)
+            if not self.skip_validation:
+                # Redundancy check
+                redundancy_result = self.redundancy_checker.check_redundancy(
+                    candidate_policy,
+                    policy_name=f"Batch-{filename}-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                    add_to_inventory=False
+                )
+
+                if not redundancy_result.success:
+                    return {
+                        'success': False,
+                        'error': f"Redundancy check failed: {redundancy_result.error_message}",
+                        'generation_time': (datetime.now() - start_time).total_seconds()
+                    }
+
+                # Conflict check
+                conflict_result = self.conflict_checker.check_conflicts(
+                    candidate_policy,
+                    policy_name=f"Batch-{filename}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                )
+
+                if not conflict_result.success:
+                    return {
+                        'success': False,
+                        'error': f"Conflict check failed: {conflict_result.error_message}",
+                        'generation_time': (datetime.now() - start_time).total_seconds()
+                    }
+
+            # Step 5: Add to inventory (optional in batch mode)
+            policy_name = f"NL2IAM-Batch-{filename}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            policy_description = f"Generated from batch file {filename}: {natural_language[:100]}..."
+
+            try:
+                policy_id = self.redundancy_checker.add_existing_policy(
+                    candidate_policy,
+                    name=policy_name,
+                    description=policy_description
+                )
+            except Exception as e:
+                # Don't fail the whole process if inventory addition fails
+                policy_id = None
+
+            generation_time = (datetime.now() - start_time).total_seconds()
+
+            return {
+                'success': True,
+                'policy': candidate_policy,
+                'policy_id': policy_id,
+                'dsl': dsl_output,
+                'generation_time': generation_time,
+                'rag_contexts': len(policy_result.retrieved_contexts) if policy_result.retrieved_contexts else 0
+            }
+
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'generation_time': (datetime.now() - start_time).total_seconds()
+            }
+
 
 def main():
     """Main CLI entry point"""
@@ -497,12 +712,25 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Interactive modes
   python nl2iam_cli.py                           # Normal mode with RAG and validation
   python nl2iam_cli.py --debug                   # Debug mode with step confirmations
   python nl2iam_cli.py --no-rag                  # Generate policies without AWS documentation context
   python nl2iam_cli.py --skip-validation         # Skip redundancy and conflict checks
   python nl2iam_cli.py --no-rag --skip-validation # Fastest mode: no RAG, no validation
+
+  # Batch processing modes
+  python nl2iam_cli.py --batch testdata/Corase --output results/  # Process all files in directory
+  python nl2iam_cli.py --batch testdata/Corase --output results/ --no-rag  # Batch without RAG
+  python nl2iam_cli.py --batch testdata/Corase --skip-validation  # Batch without validation
+
+  # Custom inventory
   python nl2iam_cli.py --inventory-path ./my_policies.json  # Custom inventory file
+
+Batch Processing:
+  --batch INPUT_DIR: Process all .txt, .md, .json files in the directory
+  --output OUTPUT_DIR: Save generated policies as generated_<filename>.json
+  Files are processed automatically without user interaction
 
 Benchmarking Options:
   --no-rag: Disable Retrieval Augmented Generation for baseline comparison
@@ -544,14 +772,36 @@ Natural Language Examples:
         help='Skip redundancy and conflict validation checks'
     )
 
+    parser.add_argument(
+        '--batch',
+        type=str,
+        metavar='INPUT_DIR',
+        help='Run in batch mode processing all text files in the specified directory'
+    )
+
+    parser.add_argument(
+        '--output',
+        type=str,
+        metavar='OUTPUT_DIR',
+        help='Output directory for generated policy JSON files (used with --batch)'
+    )
+
     args = parser.parse_args()
+
+    # Validate batch mode arguments
+    if args.batch and args.output and not Path(args.batch).exists():
+        print(f"❌ Input directory does not exist: {args.batch}")
+        sys.exit(1)
 
     # Create session
     session = NL2IAMSession(
         debug_mode=args.debug,
         inventory_path=args.inventory_path,
         use_rag=not args.no_rag,
-        skip_validation=args.skip_validation
+        skip_validation=args.skip_validation,
+        batch_mode=bool(args.batch),
+        input_dir=args.batch,
+        output_dir=args.output
     )
 
     try:
@@ -560,8 +810,13 @@ Natural Language Examples:
             print("❌ Failed to initialize. Please check your setup and try again.")
             sys.exit(1)
 
-        # Run interactive session
-        session.run_interactive_session()
+        # Run appropriate session mode
+        if session.batch_mode:
+            success = session.run_batch_processing()
+            if not success:
+                sys.exit(1)
+        else:
+            session.run_interactive_session()
 
     except KeyboardInterrupt:
         print("\n\n👋 Session interrupted. Goodbye!")
