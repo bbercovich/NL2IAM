@@ -1,0 +1,1 @@
+Requests by any user to terminate EC2 instances should be allowed only from IP ranges 192.0.2.0/24 and 203.0.113.0/24.

@@ -1,0 +1,1 @@
+Requests by any user to perform all actions on objects in the example bucket should be allowed only when the request comes from IP address 219.77.225.236 and the referrer is from example.com domains or specified CloudFront distributions. Requests by AWS Lambda should be allowed regardless of conditions. All other requests should be denied.

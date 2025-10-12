@@ -1,0 +1,1 @@
+Requests by role my-role to perform all S3 actions on bucket my-bucket should be allowed. Requests by any user to get objects from my-bucket should be allowed.

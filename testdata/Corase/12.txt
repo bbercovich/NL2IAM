@@ -1,0 +1,1 @@
+Requests to perform all CloudFormation actions should be allowed globally.Requests to perform certain EC2 actions such as describing instances, creating security groups, authorizing security group ingress, creating tags, and running instances should also be allowed globally. Additionally, requests to run EC2 instances with specific AMIs and tags should be allowed.

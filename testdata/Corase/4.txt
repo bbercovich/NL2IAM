@@ -1,0 +1,1 @@
+Requests by team leaders to modify S3 bucket permissions should be allowed.Requests by interns to modify S3 bucket permissions should be denied.

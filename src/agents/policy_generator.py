@@ -48,6 +48,7 @@ class PolicyGenerator:
         self.model_manager = model_manager
         self.dsl_parser = DSLParser()
         self.rag_engine = rag_engine
+        self._rag_enabled = rag_engine is not None
 
     def generate_policy(self, dsl_statement: str) -> PolicyGenerationResult:
         """
@@ -87,8 +88,8 @@ class PolicyGenerator:
         retrieved_contexts = None
         retrieval_metadata = None
 
-        # Use RAG engine if available to get relevant context
-        if self.rag_engine:
+        # Use RAG engine if available and enabled to get relevant context
+        if self.rag_engine and self._rag_enabled:
             try:
                 retrieval_result = self.rag_engine.retrieve_context(dsl_statement)
                 prompt = retrieval_result.augmented_prompt
@@ -263,9 +264,19 @@ Output only valid JSON without markdown formatting:"""
             raw_output=''
         )
 
+    def set_rag_enabled(self, enabled: bool) -> None:
+        """Enable or disable RAG for policy generation"""
+        self._rag_enabled = enabled and self.rag_engine is not None
+
+    def is_rag_enabled(self) -> bool:
+        """Check if RAG is currently enabled"""
+        return self._rag_enabled and self.rag_engine is not None
+
     def get_model_status(self) -> Dict:
         """Get current model status"""
         return {
             'dsl2policy_model_loaded': self.model_manager.is_model_loaded('dsl2policy_model'),
-            'available_models': list(self.model_manager.loaded_models.keys())
+            'available_models': list(self.model_manager.loaded_models.keys()),
+            'rag_enabled': self.is_rag_enabled(),
+            'rag_available': self.rag_engine is not None
         }

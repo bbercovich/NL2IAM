@@ -1,0 +1,1 @@
+Requests by any user to get objects from the xxx bucket should be allowed only from IP address 0.0.0.0. Requests by any user to get objects from the xxx bucket should be denied unless the referrer is from test.com or http://test.com.

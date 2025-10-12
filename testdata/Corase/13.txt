@@ -1,0 +1,1 @@
+Requests by any user to describe EC2 resources and get console output should be allowed.Requests by any user to launch EC2 instances with specific subnet, network interface, volume, AMI, key pair, and security group resources should be allowed.

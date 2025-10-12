@@ -1,0 +1,1 @@
+Requests by Bob to delete objects in the audit bucket should be denied.

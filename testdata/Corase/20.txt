@@ -1,0 +1,1 @@
+Requests by any user to create and delete IAM users should be allowed only for usernames that end with @domain.com.

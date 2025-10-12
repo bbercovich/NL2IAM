@@ -48,9 +48,12 @@ except ImportError as e:
 class NL2IAMSession:
     """Manages a single CLI session with state and configurations"""
 
-    def __init__(self, debug_mode: bool = False, inventory_path: Optional[str] = None):
+    def __init__(self, debug_mode: bool = False, inventory_path: Optional[str] = None,
+                 use_rag: bool = True, skip_validation: bool = False):
         self.debug_mode = debug_mode
         self.inventory_path = inventory_path or "./data/policy_inventory.json"
+        self.use_rag = use_rag
+        self.skip_validation = skip_validation
 
         # Pipeline components
         self.model_manager = None
@@ -96,24 +99,28 @@ class NL2IAMSession:
             else:
                 print("✅ DSL→Policy model loaded successfully")
 
-            # Initialize RAG engine
-            print("📚 Setting up RAG engine...")
-            aws_docs_path = "./docs/iam-ug.pdf"
-            vector_store_path = "./data/vector_store/"
+            # Initialize RAG engine if enabled
+            if self.use_rag:
+                print("📚 Setting up RAG engine...")
+                aws_docs_path = "./docs/iam-ug.pdf"
+                vector_store_path = "./data/vector_store/"
 
-            if Path(aws_docs_path).exists():
-                self.rag_engine = RAGEngine(vector_store_path=vector_store_path)
-                rag_success = self.rag_engine.initialize_knowledge_base(aws_docs_path)
-                if rag_success:
-                    print("✅ RAG engine initialized with AWS documentation")
-                    stats = self.rag_engine.get_knowledge_base_stats()
-                    print(f"   📊 Knowledge base: {stats.get('total_chunks', 0)} chunks")
+                if Path(aws_docs_path).exists():
+                    self.rag_engine = RAGEngine(vector_store_path=vector_store_path)
+                    rag_success = self.rag_engine.initialize_knowledge_base(aws_docs_path)
+                    if rag_success:
+                        print("✅ RAG engine initialized with AWS documentation")
+                        stats = self.rag_engine.get_knowledge_base_stats()
+                        print(f"   📊 Knowledge base: {stats.get('total_chunks', 0)} chunks")
+                    else:
+                        print("⚠️  RAG engine initialization failed - proceeding without RAG")
+                        self.rag_engine = None
                 else:
-                    print("⚠️  RAG engine initialization failed - proceeding without RAG")
+                    print(f"⚠️  AWS documentation not found at {aws_docs_path}")
+                    print("   📝 Proceeding without RAG enhancement")
                     self.rag_engine = None
             else:
-                print(f"⚠️  AWS documentation not found at {aws_docs_path}")
-                print("   📝 Proceeding without RAG enhancement")
+                print("🚫 RAG disabled - proceeding without documentation enhancement")
                 self.rag_engine = None
 
             # Initialize pipeline agents
@@ -170,6 +177,10 @@ class NL2IAMSession:
         print("   • 'stats' - Show inventory statistics")
         if self.debug_mode:
             print("🐛 Debug mode: You'll see intermediate steps and confirmations.")
+        if not self.use_rag:
+            print("🚫 RAG disabled: Policies generated without AWS documentation context.")
+        if self.skip_validation:
+            print("⚠️  Validation disabled: Redundancy and conflict checks will be skipped.")
         print()
 
         while True:
@@ -339,116 +350,120 @@ class NL2IAMSession:
         print("\n📄 Generated Policy:")
         print(json.dumps(candidate_policy, indent=2))
 
-        # Step 3: Redundancy Check
-        print(f"\n🔍 Step 3: Checking for redundancy...")
+        # Step 3: Redundancy Check (if validation is enabled)
+        if not self.skip_validation:
+            print(f"\n🔍 Step 3: Checking for redundancy...")
 
-        redundancy_result = self.redundancy_checker.check_redundancy(
-            candidate_policy,
-            policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-            add_to_inventory=False  # Don't add yet
-        )
+            redundancy_result = self.redundancy_checker.check_redundancy(
+                candidate_policy,
+                policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                add_to_inventory=False  # Don't add yet
+            )
 
-        if not redundancy_result.success:
-            print(f"❌ Redundancy check failed: {redundancy_result.error_message}")
-            return False
+            if not redundancy_result.success:
+                print(f"❌ Redundancy check failed: {redundancy_result.error_message}")
+                return False
 
-        if redundancy_result.has_redundancy:
-            print("⚠️  REDUNDANCY DETECTED")
-            print(f"   📋 {redundancy_result.summary}")
+            if redundancy_result.has_redundancy:
+                print("⚠️  REDUNDANCY DETECTED")
+                print(f"   📋 {redundancy_result.summary}")
 
-            # Show redundancy details
-            for result in redundancy_result.redundancy_results:
-                print(f"\n   🔍 Redundancy Details:")
-                print(f"      Type: {result.redundancy_type}")
-                print(f"      Confidence: {result.confidence_score:.2f}")
-                print(f"      Explanation: {result.explanation}")
+                # Show redundancy details
+                for result in redundancy_result.redundancy_results:
+                    print(f"\n   🔍 Redundancy Details:")
+                    print(f"      Type: {result.redundancy_type}")
+                    print(f"      Confidence: {result.confidence_score:.2f}")
+                    print(f"      Explanation: {result.explanation}")
 
-                # Show conflicting policy
-                conflicting_policy_id = result.conflicting_policy_id
-                conflicting_policies = self.redundancy_checker.list_policies()
-                conflicting_policy = next(
-                    (p for p in conflicting_policies if p['id'] == conflicting_policy_id),
-                    None
-                )
+                    # Show conflicting policy
+                    conflicting_policy_id = result.conflicting_policy_id
+                    conflicting_policies = self.redundancy_checker.list_policies()
+                    conflicting_policy = next(
+                        (p for p in conflicting_policies if p['id'] == conflicting_policy_id),
+                        None
+                    )
 
-                if conflicting_policy:
-                    print(f"      📄 Existing Policy '{conflicting_policy['name']}':")
-                    print(json.dumps(conflicting_policy['policy'], indent=8))
+                    if conflicting_policy:
+                        print(f"      📄 Existing Policy '{conflicting_policy['name']}':")
+                        print(json.dumps(conflicting_policy['policy'], indent=8))
 
-            # Show recommendations
-            print(f"\n   💡 Recommendations:")
-            for rec in redundancy_result.recommendations:
-                print(f"      {rec}")
+                # Show recommendations
+                print(f"\n   💡 Recommendations:")
+                for rec in redundancy_result.recommendations:
+                    print(f"      {rec}")
 
-            # Ask user what to do
-            while True:
-                response = input(f"\n   ❓ Continue anyway or start over? (continue/restart): ").strip().lower()
-                if response in ['c', 'continue']:
-                    break
-                elif response in ['r', 'restart', 's', 'start']:
-                    return False
-                else:
-                    print("   Please enter 'continue' or 'restart'")
+                # Ask user what to do
+                while True:
+                    response = input(f"\n   ❓ Continue anyway or start over? (continue/restart): ").strip().lower()
+                    if response in ['c', 'continue']:
+                        break
+                    elif response in ['r', 'restart', 's', 'start']:
+                        return False
+                    else:
+                        print("   Please enter 'continue' or 'restart'")
+            else:
+                print("✅ No redundancy detected")
+
+            # Step 4: Conflict Check
+            print(f"\n⚔️  Step 4: Checking for conflicts...")
+
+            conflict_result = self.conflict_checker.check_conflicts(
+                candidate_policy,
+                policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            )
+
+            if not conflict_result.success:
+                print(f"❌ Conflict check failed: {conflict_result.error_message}")
+                return False
+
+            if conflict_result.has_conflicts:
+                print(f"⚠️  CONFLICTS DETECTED")
+                print(f"   🚨 Risk Level: {conflict_result.overall_risk_level.upper()}")
+                print(f"   📋 {conflict_result.summary}")
+
+                # Show conflict details
+                for result in conflict_result.conflict_results:
+                    print(f"\n   ⚔️  Conflict Details:")
+                    print(f"      Type: {result.conflict_type}")
+                    print(f"      Severity: {result.severity}")
+                    print(f"      Confidence: {result.confidence_score:.2f}")
+                    print(f"      Explanation: {result.explanation}")
+                    print(f"      Affected Actions: {list(result.affected_actions)}")
+
+                    # Show conflicting policy
+                    conflicting_policy_id = result.conflicting_policy_id
+                    conflicting_policies = self.conflict_checker.list_policies()
+                    conflicting_policy = next(
+                        (p for p in conflicting_policies if p['id'] == conflicting_policy_id),
+                        None
+                    )
+
+                    if conflicting_policy:
+                        print(f"      📄 Conflicting Policy '{conflicting_policy['name']}':")
+                        print(json.dumps(conflicting_policy['policy'], indent=8))
+
+                # Show recommendations
+                print(f"\n   💡 Recommendations:")
+                for rec in conflict_result.recommendations:
+                    print(f"      {rec}")
+
+                # Ask user what to do
+                while True:
+                    response = input(f"\n   ❓ Continue anyway or start over? (continue/restart): ").strip().lower()
+                    if response in ['c', 'continue']:
+                        break
+                    elif response in ['r', 'restart', 's', 'start']:
+                        return False
+                    else:
+                        print("   Please enter 'continue' or 'restart'")
+            else:
+                print("✅ No conflicts detected")
         else:
-            print("✅ No redundancy detected")
+            print("\n⚠️  Steps 3-4: Validation checks skipped (--skip-validation flag enabled)")
 
-        # Step 4: Conflict Check
-        print(f"\n⚔️  Step 4: Checking for conflicts...")
-
-        conflict_result = self.conflict_checker.check_conflicts(
-            candidate_policy,
-            policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        )
-
-        if not conflict_result.success:
-            print(f"❌ Conflict check failed: {conflict_result.error_message}")
-            return False
-
-        if conflict_result.has_conflicts:
-            print(f"⚠️  CONFLICTS DETECTED")
-            print(f"   🚨 Risk Level: {conflict_result.overall_risk_level.upper()}")
-            print(f"   📋 {conflict_result.summary}")
-
-            # Show conflict details
-            for result in conflict_result.conflict_results:
-                print(f"\n   ⚔️  Conflict Details:")
-                print(f"      Type: {result.conflict_type}")
-                print(f"      Severity: {result.severity}")
-                print(f"      Confidence: {result.confidence_score:.2f}")
-                print(f"      Explanation: {result.explanation}")
-                print(f"      Affected Actions: {list(result.affected_actions)}")
-
-                # Show conflicting policy
-                conflicting_policy_id = result.conflicting_policy_id
-                conflicting_policies = self.conflict_checker.list_policies()
-                conflicting_policy = next(
-                    (p for p in conflicting_policies if p['id'] == conflicting_policy_id),
-                    None
-                )
-
-                if conflicting_policy:
-                    print(f"      📄 Conflicting Policy '{conflicting_policy['name']}':")
-                    print(json.dumps(conflicting_policy['policy'], indent=8))
-
-            # Show recommendations
-            print(f"\n   💡 Recommendations:")
-            for rec in conflict_result.recommendations:
-                print(f"      {rec}")
-
-            # Ask user what to do
-            while True:
-                response = input(f"\n   ❓ Continue anyway or start over? (continue/restart): ").strip().lower()
-                if response in ['c', 'continue']:
-                    break
-                elif response in ['r', 'restart', 's', 'start']:
-                    return False
-                else:
-                    print("   Please enter 'continue' or 'restart'")
-        else:
-            print("✅ No conflicts detected")
-
-        # Step 5: Add to Policy Inventory
-        print(f"\n💾 Step 5: Adding policy to inventory...")
+        # Step 3/5: Add to Policy Inventory (Step number depends on whether validation was skipped)
+        final_step = "3" if self.skip_validation else "5"
+        print(f"\n💾 Step {final_step}: Adding policy to inventory...")
 
         policy_name = f"NL2IAM-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         policy_description = f"Generated from: {natural_language[:100]}..."
@@ -482,9 +497,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python nl2iam_cli.py                           # Normal mode
+  python nl2iam_cli.py                           # Normal mode with RAG and validation
   python nl2iam_cli.py --debug                   # Debug mode with step confirmations
+  python nl2iam_cli.py --no-rag                  # Generate policies without AWS documentation context
+  python nl2iam_cli.py --skip-validation         # Skip redundancy and conflict checks
+  python nl2iam_cli.py --no-rag --skip-validation # Fastest mode: no RAG, no validation
   python nl2iam_cli.py --inventory-path ./my_policies.json  # Custom inventory file
+
+Benchmarking Options:
+  --no-rag: Disable Retrieval Augmented Generation for baseline comparison
+  --skip-validation: Skip redundancy/conflict checks for speed testing
 
 Debug Mode Features:
   - Shows intermediate DSL translation
@@ -510,12 +532,26 @@ Natural Language Examples:
         help='Path to policy inventory file (default: ./data/policy_inventory.json)'
     )
 
+    parser.add_argument(
+        '--no-rag',
+        action='store_true',
+        help='Disable RAG (Retrieval Augmented Generation) - generate policies without AWS documentation context'
+    )
+
+    parser.add_argument(
+        '--skip-validation',
+        action='store_true',
+        help='Skip redundancy and conflict validation checks'
+    )
+
     args = parser.parse_args()
 
     # Create session
     session = NL2IAMSession(
         debug_mode=args.debug,
-        inventory_path=args.inventory_path
+        inventory_path=args.inventory_path,
+        use_rag=not args.no_rag,
+        skip_validation=args.skip_validation
     )
 
     try:

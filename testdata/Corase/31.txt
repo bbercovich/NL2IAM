@@ -1,0 +1,1 @@
+Requests by any user to list all buckets and get bucket locations should be allowed. Requests by any user to list bucket contents in mybucket should be allowed for root, home, and user-specific home folders with forward slash delimiters. Requests by any user to perform all actions in their own home folder should be allowed.

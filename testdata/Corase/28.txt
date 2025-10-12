@@ -1,0 +1,1 @@
+Requests by any user to perform all actions on objects in mybucket should be allowed. Requests by any user to delete bucket configurations and object versions in mybucket should be denied.

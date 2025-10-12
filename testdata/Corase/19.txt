@@ -1,0 +1,1 @@
+Requests by any user to attach volumes to EC2 instances should be allowed only when the resources are tagged with 'mytag' containing value 'atam' (case insensitive)

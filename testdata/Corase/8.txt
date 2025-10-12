@@ -1,0 +1,1 @@
+Requests by guest users to modify resources in the temporary bucket should be denied.Requests by registered users to view resources in the temporary bucket should be allowed.

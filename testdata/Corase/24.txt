@@ -1,0 +1,1 @@
+Requests by any user to perform S3 actions in the myrandomnameforbucket should be allowed only when the principal is an IAM user.

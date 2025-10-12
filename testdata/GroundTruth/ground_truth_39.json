@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Action": "s3:ListBucket",
+      "Effect": "Allow",
+      "Resource": "arn:aws:s3:::my-bucket"
+    },
+    {
+      "Effect": "Deny",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::my-bucket",
+      "Condition": {
+        "Null": {
+          "s3:prefix": "false"
+        },
+        "StringNotLike": {
+          "s3:prefix": [
+            "",
+            "home/",
+            "home/Jas/*"
+          ]
+        }
+      }
+    },
+    {
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::my-bucket"
+      ],
+      "Condition": {
+        "Null": {
+          "s3:prefix": "true"
+        },
+        "StringEquals": {
+          "s3:delimiter": [
+            "/"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::my-bucket/home/Jas/*"
+    }
+  ]
+}

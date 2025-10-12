@@ -1,0 +1,1 @@
+Requests by any user to get bucket locations and list all buckets should be allowed. Requests to list contents in the singlecomm.recordings bucket should be allowed for root and 0001 prefixes with forward slash delimiters. All S3 actions should be allowed on objects within the 0001 folder of the singlecomm.recordings bucket.

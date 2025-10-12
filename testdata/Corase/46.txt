@@ -1,0 +1,1 @@
+Requests by any user to list contents of the test bucket should be allowed. Requests by any user to put, get, and delete objects in the test bucket should be allowed.

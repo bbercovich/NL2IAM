@@ -1,0 +1,1 @@
+Requests by the HR role to access employee records should be allowed.Requests by the finance role to access salary data should be allowed.Requests by the HR role to modify salary data should be denied.

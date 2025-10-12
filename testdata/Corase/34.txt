@@ -1,0 +1,1 @@
+Requests by any user to perform all S3 actions on all resources should be allowed. Requests by any user to perform any S3 actions on the Directory1 folder in the madeupbucketname bucket should be denied.

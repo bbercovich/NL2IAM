@@ -1,0 +1,1 @@
+Requests by the root account (12345667789012) to list objects in the mybucket bucket should be allowed.

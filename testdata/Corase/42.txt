@@ -1,0 +1,1 @@
+Requests by any user to get objects from myexamplebucket should be allowed. Requests by any user to get objects from myexamplebucket should be denied.

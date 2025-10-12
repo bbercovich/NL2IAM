@@ -1,0 +1,1 @@
+Requests by any user to get bucket locations should be allowed. Requests by any user to list contents in the examplebucket bucket should be allowed for root and folder prefixes with forward slash delimiters. All S3 actions should be allowed on objects within the folder path of the examplebucket bucket.

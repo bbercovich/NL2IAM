@@ -1,0 +1,1 @@
+Requests by any user to list bucket contents and get location of the examplebucket should be allowed. Requests by any user to perform all S3 actions in the test folder of examplebucket should be allowed.

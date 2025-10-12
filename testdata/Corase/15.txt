@@ -1,0 +1,1 @@
+Requests by any user to send commands, stop instances, view security info, and add tags should be allowed.Requests by any user to launch specific types of instances (t2.nano through t2.medium) should be allowed.
