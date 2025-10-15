@@ -1,0 +1,47 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "219.77.225.236"
+        },
+        "StringLike": {
+          "aws:Referer": "*.example.com"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "219.77.225.236"
+        },
+        "StringEquals": {
+          "aws:Referer": "cloudfront.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::account-id:role/aws-lambda"
+      },
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    },
+    {
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    }
+  ]
+}

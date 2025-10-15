@@ -218,6 +218,12 @@ class PolicyGenerator:
 DSL: {dsl_statement}
 
 Generate a complete AWS IAM policy with Version and Statement fields. Use proper AWS ARN format for resources.
+Note: Use ACCOUNT_ID as placeholder in ARNs.
+Example: arn:aws:iam::ACCOUNT_ID:user/alice
+
+When generating tags ensure the value is the same as the given value, perseving the case.  
+Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
+
 Output only valid JSON without markdown formatting:"""
 
     def _validate_policy(self, policy: Dict) -> Dict:

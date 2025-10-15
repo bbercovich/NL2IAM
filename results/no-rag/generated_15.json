@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:SendCommand",
+        "ec2:StopInstances",
+        "ec2:DescribeSecurityGroups",
+        "ec2:CreateTags"
+      ],
+      "Resource": "arn:aws:ec2:*:*:instance/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": [
+            "t2.nano",
+            "t2.micro",
+            "t2.small",
+            "t2.medium"
+          ]
+        }
+      }
+    }
+  ]
+}

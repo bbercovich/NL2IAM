@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::account-id:role/hr"
+      },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::employee-records/*"
+    },
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::account-id:role/finance"
+      },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::salary-data/*"
+    },
+    {
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "arn:aws:iam::account-id:role/hr"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::salary-data/*"
+    }
+  ]
+}

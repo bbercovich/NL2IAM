@@ -119,6 +119,9 @@ DSL FORMAT:
 - Conditions: WHERE key operator value
 - Multi-statement: Number each (1., 2., etc.)
 
+When generating tags ensure the value is the same as the given value, perseving the case.  
+Example: the natural language tagged with OneTwo=1_2 should be translated to ec2:ResourceTag/OneTwo=1_2
+
 EXAMPLES (do not repeat these):
 Example 1: "Requests by Alice to read objects in the public bucket should be allowed." → ALLOW user:alice READ bucket:public-bucket/*
 Example 2: "Requests by Bob to delete objects in the audit bucket should be denied." → DENY user:bob DELETE bucket:audit-bucket/*
