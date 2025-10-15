@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-def run_quacky_analysis(gt_policy_path, synth_policy_path, quacky_path="/home/user/Research/quacky/src"):
+def run_quacky_analysis(gt_policy_path, synth_policy_path, quacky_path="/workspace/quacky/src"):
     """Run Quacky analysis on two policies and return detailed results"""
     try:
         # Use Quacky to compare policies
         result = subprocess.run([
-            'python', f'{quacky_path}/quacky.py',
+            'python', 'quacky.py',
             '-p1', gt_policy_path,
             '-p2', synth_policy_path,
             '-b', '100',  # bound for analysis

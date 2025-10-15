@@ -18,7 +18,7 @@ from collections import defaultdict
 class QuackyComparator:
     """Compare policies using Quacky and generate comprehensive statistics"""
 
-    def __init__(self, quacky_path: str = "/home/user/Research/quacky/src", timeout: int = 300):
+    def __init__(self, quacky_path: str = "/workspace/quacky/src", timeout: int = 300):
         """
         Initialize the comparator
 
@@ -43,7 +43,7 @@ class QuackyComparator:
         """
         try:
             result = subprocess.run([
-                'python', f'{self.quacky_path}/quacky.py',
+                'python', 'quacky.py',
                 '-p1', gt_policy_path,
                 '-p2', generated_policy_path,
                 '-b', '50',  # Lower bound for faster analysis
@@ -316,7 +316,7 @@ Examples:
     parser.add_argument(
         '--quacky-path',
         type=str,
-        default="/home/user/Research/quacky/src",
+        default="/workspace/quacky/src",
         help='Path to Quacky source directory'
     )
 

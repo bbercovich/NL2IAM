@@ -91,7 +91,7 @@ Expected directory structure:
     parser.add_argument(
         '--quacky-path',
         type=str,
-        default="/home/user/Research/quacky/src",
+        default="/workspace/quacky/src",
         help='Path to Quacky source directory'
     )
 
