@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:GetConsoleOutput"
+      ],
+      "Resource": "arn:aws:ec2:*:ACCOUNT_ID:instance/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*:ACCOUNT_ID:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:SubnetId": "specific-subnet",
+          "ec2:NetworkInterfaceId": "specific-network-interface",
+          "ec2:VolumeId": "specific-volume",
+          "ec2:ImageId": "specific-ami",
+          "ec2:KeyName": "specific-key-pair",
+          "ec2:SecurityGroupId": "specific-security-group"
+        }
+      }
+    }
+  ]
+}

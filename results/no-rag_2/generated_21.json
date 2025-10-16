@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser"
+      ],
+      "Resource": "arn:aws:iam::ACCOUNT_ID:user/*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser"
+      ],
+      "Resource": "arn:aws:iam::ACCOUNT_ID:user/*",
+      "Condition": {
+        "StringLike": {
+          "iam:username": "*@domain.com"
+        }
+      }
+    }
+  ]
+}

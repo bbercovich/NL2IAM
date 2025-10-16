@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutPublicAccessBlock",
+        "s3:GetPublicAccessBlock",
+        "s3:ListAllMyBuckets",
+        "s3:CreateJob",
+        "s3:UpdateJobPriority",
+        "s3:UpdateJobStatus"
+      ],
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::mybucket"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::mybucket/*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucketPolicy",
+        "s3:DeleteBucketWebsite",
+        "s3:DeleteBucketOwnershipControls",
+        "s3:DeleteBucketEncryption",
+        "s3:DeleteBucketTagging",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::mybucket/*"
+    }
+  ]
+}

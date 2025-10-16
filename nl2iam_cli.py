@@ -266,6 +266,11 @@ class NL2IAMSession:
             output_path.mkdir(parents=True, exist_ok=True)
             print(f"📁 Output directory: {self.output_dir}")
 
+            # Create DSL output directory
+            dsl_output_path = Path(f"{self.output_dir}-dsl")
+            dsl_output_path.mkdir(parents=True, exist_ok=True)
+            print(f"📁 DSL output directory: {self.output_dir}-dsl")
+
         print("\n" + "=" * 60)
         print("🚀 NL2IAM Batch Processing Mode")
         print("=" * 60)
@@ -318,12 +323,29 @@ class NL2IAMSession:
 
                     # Save to output directory if specified
                     if self.output_dir:
+                        # Save IAM policy
                         output_filename = f"generated_{file_path.stem}.json"
                         output_file_path = Path(self.output_dir) / output_filename
 
                         with open(output_file_path, 'w', encoding='utf-8') as f:
                             json.dump(result['policy'], f, indent=2)
-                        print(f"💾 Saved: {output_filename}")
+                        print(f"💾 Saved policy: {output_filename}")
+
+                        # Save DSL
+                        dsl_filename = f"generated_{file_path.stem}.json"
+                        dsl_file_path = Path(f"{self.output_dir}-dsl") / dsl_filename
+
+                        dsl_data = {
+                            "filename": file_path.name,
+                            "input": content,
+                            "dsl": result['dsl'],
+                            "generation_time": result['generation_time'],
+                            "timestamp": datetime.now().isoformat()
+                        }
+
+                        with open(dsl_file_path, 'w', encoding='utf-8') as f:
+                            json.dump(dsl_data, f, indent=2)
+                        print(f"💾 Saved DSL: {dsl_filename}")
                 else:
                     failed += 1
                     print(f"❌ Failed: {file_path.name} - {result.get('error', 'Unknown error')}")
@@ -355,7 +377,8 @@ class NL2IAMSession:
         print(f"📈 Success rate: {(successful/total_files*100):.1f}%")
 
         if self.output_dir:
-            print(f"📂 Output saved to: {self.output_dir}")
+            print(f"📂 IAM policies saved to: {self.output_dir}")
+            print(f"📂 DSL files saved to: {self.output_dir}-dsl")
 
         return successful > 0
 

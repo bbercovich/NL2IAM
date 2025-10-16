@@ -1,0 +1,66 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListAllMyBuckets"
+      ],
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::bluebolt",
+      "Condition": {
+        "StringEquals": {
+          "s3:prefix": [
+            "root/",
+            "production/",
+            "processing/",
+            "production/*/",
+            "company/shared/"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::*",
+      "Condition": {
+        "StringEquals": {
+          "s3:prefix": [
+            "company/shared/",
+            "production/*/"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "arn:aws:s3:::*",
+      "Condition": {
+        "StringEquals": {
+          "s3:prefix": [
+            "company/shared/*",
+            "production/*/",
+            "processing/*/"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "arn:aws:s3:::*",
+      "Condition": {
+        "StringEquals": {
+          "s3:prefix": "management/*"
+        }
+      }
+    }
+  ]
+}

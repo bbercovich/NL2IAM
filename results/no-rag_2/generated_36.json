@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::xxx/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "0.0.0.0"
+        }
+      }
+    },
+    {
+      "Effect": "Deny",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::xxx/*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:Referer": [
+            "test.com",
+            "http://test.com"
+          ]
+        }
+      }
+    }
+  ]
+}
