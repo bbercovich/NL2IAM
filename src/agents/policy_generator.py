@@ -215,17 +215,7 @@ class PolicyGenerator:
         """Create fallback prompt when RAG is not available or fails"""
         return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
 
-DSL: {dsl_statement}
-
-NOTE: Use "ACCOUNT_ID" as the account placeholder in all ARNs.
-Examples:
-- user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
-- role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
-
-NOTE: If the DSL contains a valid arn with an account number in the PRINCIPAL field, use the account number in the ARN instead of ACCOUNT_ID.
-Examples:
-- PRINCIPAL:arn:aws:iam::12345678901234:root → "AWS": "arn:aws:iam::12345678901234:root"
-
+DSL: {dsl_statement} Note: Use ACCOUNT_ID as placeholder in ARNs.
 
 When generating tags ensure the value is the same as the given value, preserving the case.
 Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
