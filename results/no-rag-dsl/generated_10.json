@@ -1,0 +1,7 @@
+{
+  "filename": "10.txt",
+  "input": "Requests by any user to attach and detach volumes from instances in the Development department should be allowed.Requests by users to attach and detach their own volumes should be allowed.",
+  "dsl": "1. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=development  \n2. ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON volume:* WHERE ec2:ResourceTag/Owner=${aws:username}",
+  "generation_time": 3.34846,
+  "timestamp": "2025-10-16T05:55:25.512086"
+}

@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "219.77.225.236"
+        },
+        "StringLike": {
+          "aws:Referer": "*.example.com"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::ACCOUNT_ID:role/aws-lambda"
+      },
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    }
+  ]
+}

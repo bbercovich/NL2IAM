@@ -1,0 +1,7 @@
+{
+  "filename": "9.txt",
+  "input": "Requests by any user to perform EC2 actions in us-west-2 region should be allowed.Requests by any user to perform network, VPC, and reserved instance actions should be denied.Requests by any user to perform all actions on the projectx12345 bucket should be allowed.Requests by any user to list and get objects from any S3 bucket should be allowed.Requests by any user to view billing and usage in AWS portal should be allowed.",
+  "dsl": "1. ALLOW * ACTION:ec2:* ON * WHERE aws:RequestedRegion=us-west-2  \n2. DENY * ACTION:[ec2:*,vpc:*,ec2:DescribeReservedInstances] ON *  \n3. ALLOW * ACTION:* ON bucket:projectx12345/*  \n4. ALLOW * ACTION:[s3:ListBucket,s3:GetObject] ON bucket:*  \n5. ALLOW * ACTION:[aws-portal:ViewBilling,aws-portal:ViewUsage] ON *",
+  "generation_time": 7.371282,
+  "timestamp": "2025-10-16T05:52:25.647451"
+}

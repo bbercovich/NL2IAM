@@ -1,0 +1,7 @@
+{
+  "filename": "28.txt",
+  "input": "Requests by any user to perform all actions on objects in mybucket should be allowed. Requests by any user to delete bucket configurations and object versions in mybucket should be denied.",
+  "dsl": "1. ALLOW * ACTION:s3:* ON bucket:mybucket/*  \n2. DENY * ACTION:[s3:DeleteBucketPolicy, s3:DeleteBucketWebsite, s3:DeleteBucketOwnershipControls, s3:DeleteBucketEncryption, s3:DeleteObjectVersion] ON bucket:mybucket/*",
+  "generation_time": 4.262035,
+  "timestamp": "2025-10-16T05:54:09.666227"
+}

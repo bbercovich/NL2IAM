@@ -1,0 +1,7 @@
+{
+  "filename": "16.txt",
+  "input": "Requests by any user to list bucket contents and versions in the singlecomm.recordings bucket should be allowed only when the prefix matches '0001'.",
+  "dsl": "ALLOW ACTION:[s3:ListBucket,s3:ListBucketVersions] ON bucket:singlecomm.recordings WHERE s3:prefix=0001",
+  "generation_time": 2.669351,
+  "timestamp": "2025-10-16T05:54:58.160080"
+}

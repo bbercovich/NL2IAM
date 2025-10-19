@@ -1,0 +1,7 @@
+{
+  "filename": "30.txt",
+  "input": "Requests by any user to get objects from examplebucket should be allowed only when the prefix is 'mp3'.",
+  "dsl": "ALLOW ACTION:s3:GetObject ON bucket:examplebucket/* WHERE s3:prefix=mp3",
+  "generation_time": 1.847425,
+  "timestamp": "2025-10-16T05:53:48.691742"
+}

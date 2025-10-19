@@ -1,0 +1,7 @@
+{
+  "filename": "36.txt",
+  "input": "Requests by any user to get objects from the xxx bucket should be allowed only from IP address 0.0.0.0. Requests by any user to get objects from the xxx bucket should be denied unless the referrer is from test.com or http://test.com.",
+  "dsl": "1. ALLOW * s3:GetObject ON bucket:xxx/* WHERE aws:SourceIp=0.0.0.0  \n2. DENY * s3:GetObject ON bucket:xxx/* WHERE NOT aws:Referer=[test.com,http://test.com]",
+  "generation_time": 4.011469,
+  "timestamp": "2025-10-16T05:53:26.966831"
+}

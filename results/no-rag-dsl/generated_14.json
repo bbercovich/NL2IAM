@@ -1,0 +1,7 @@
+{
+  "filename": "14.txt",
+  "input": "Requests by any user to send SSM commands, stop instances, describe security groups and network interfaces, and create tags should be allowed.Requests by any user to launch instances with specific network interfaces, security groups, subnets, and images should be allowed.Requests by any user to launch instances with volumes up to 16GB should be allowed.Requests by any user to launch t2.nano, t2.micro, t2.small, or t2.medium instances should be allowed.",
+  "dsl": "1. ALLOW * [ssm:SendCommand,ec2:StopInstances,ec2:DescribeSecurityGroups,ec2:DescribeNetworkInterfaces,ec2:CreateTags] ON *\n2. ALLOW * ec2:RunInstances ON instance:* WHERE ec2:NetworkInterfaceId=* AND ec2:SecurityGroupId=* AND ec2:SubnetId=* AND ec2:ImageId=*\n3. ALLOW * ec2:RunInstances ON instance:* WHERE ec2:VolumeSize<=16\n4. ALLOW * ec2:RunInstances ON instance:* WHERE ec2:InstanceType IN [t2.nano,t2.micro,t2.small,t2.medium]",
+  "generation_time": 7.591975,
+  "timestamp": "2025-10-16T05:55:09.377425"
+}

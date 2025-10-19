@@ -1,0 +1,7 @@
+{
+  "filename": "41.txt",
+  "input": "Requests by any user to get objects from files.mydomain.com should be allowed only when the referrer is from AWS Console or www.mydomain.com.",
+  "dsl": "ALLOW ACTION:s3:GetObject ON bucket:files.mydomain.com/* WHERE aws:Referer=[\"https://console.aws.amazon.com\", \"https://www.mydomain.com\"]",
+  "generation_time": 2.680782,
+  "timestamp": "2025-10-16T05:53:04.837331"
+}

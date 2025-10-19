@@ -1,0 +1,7 @@
+{
+  "filename": "8.txt",
+  "input": "Requests by guest users to modify resources in the temporary bucket should be denied.Requests by registered users to view resources in the temporary bucket should be allowed.",
+  "dsl": "1. DENY user:guest MODIFY bucket:temporary-bucket/*  \n2. ALLOW user:registered VIEW bucket:temporary-bucket/*",
+  "generation_time": 8.180332,
+  "timestamp": "2025-10-16T05:52:33.838386"
+}

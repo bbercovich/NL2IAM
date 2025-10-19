@@ -1,0 +1,7 @@
+{
+  "filename": "26.txt",
+  "input": "Requests by any user to list all buckets should be allowed. Requests by any user to list bucket contents and get location for the examplebucket should be allowed. Requests by any user to put, get, delete and modify ACLs for objects in the examplebucket should be allowed.",
+  "dsl": "1. ALLOW * s3:ListAllMyBuckets ON bucket:*\n2. ALLOW * [s3:ListBucket,s3:GetBucketLocation] ON bucket:examplebucket\n3. ALLOW * [s3:PutObject,s3:GetObject,s3:DeleteObject,s3:PutObjectAcl,s3:GetObjectAcl] ON bucket:examplebucket/*",
+  "generation_time": 4.055008,
+  "timestamp": "2025-10-16T05:54:21.569487"
+}

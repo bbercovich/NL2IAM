@@ -33,8 +33,9 @@ class NLToTranslator:
     like "ALLOW user:alice READ bucket:public-bucket/*"
     """
 
-    def __init__(self, model_manager=None):
+    def __init__(self, model_manager=None, rag_engine=None):
         self.model_manager = model_manager
+        self.rag_engine = rag_engine
         self.logger = logging.getLogger(__name__)
 
 
@@ -64,8 +65,8 @@ class NLToTranslator:
         # Remove extra whitespace
         text = ' '.join(text.split())
 
-        # Convert to lowercase for processing (we'll maintain original case in output)
-        text = text.lower()
+        # DO NOT convert to lowercase to preserve case for tags and other values
+        # text = text.lower()  # Commented out to preserve case
 
         # Remove punctuation at the end
         text = text.rstrip('.,!?;')
@@ -75,15 +76,27 @@ class NLToTranslator:
     def _model_based_translation(self, text: str, **kwargs) -> TranslationResult:
         """Use the loaded model for translation"""
         try:
-            # Construct prompt for the model
-            prompt = self._build_model_prompt(text)
+            # Use RAG engine if available to get relevant context
+            if self.rag_engine:
+                try:
+                    retrieval_result = self.rag_engine.retrieve_context(text)
+                    prompt = retrieval_result.augmented_prompt
+                    reasoning = "Model-based translation with RAG context"
+                except Exception as e:
+                    self.logger.warning(f"RAG context retrieval failed: {e}")
+                    prompt = self._build_model_prompt(text)
+                    reasoning = "Model-based translation (RAG failed)"
+            else:
+                # Construct basic prompt for the model
+                prompt = self._build_model_prompt(text)
+                reasoning = "Model-based translation"
 
             # Generate DSL using the model
             dsl_output = self.model_manager.generate(
                 "nl2dsl_model",
                 prompt,
                 max_length=kwargs.get('max_length', 512),
-                temperature=kwargs.get('temperature', 0.1),
+                temperature=kwargs.get('temperature', 0.05),  # Very low temperature for consistent translation
                 do_sample=kwargs.get('do_sample', False),
                 stop_tokens=kwargs.get('stop_tokens', ['<|user|>', '\n\n<|user|>', '<|end|>'])
             )
@@ -92,11 +105,10 @@ class NLToTranslator:
             # Might need some addtonal work here
             #dsl_output = self._clean_model_output(dsl_output)
 
-
             return TranslationResult(
                 original_text=text,
                 dsl_output=dsl_output,
-                reasoning="Model-based translation",
+                reasoning=reasoning,
                 model_used="nl2dsl_model"
             )
 
@@ -119,8 +131,11 @@ DSL FORMAT:
 - Conditions: WHERE key operator value
 - Multi-statement: Number each (1., 2., etc.)
 
-When generating tags ensure the value is the same as the given value, perseving the case.  
-Example: the natural language tagged with OneTwo=1_2 should be translated to ec2:ResourceTag/OneTwo=1_2
+CRITICAL: PRESERVE EXACT CASE for all tag names and values. Never change capitalization.
+- Tag name ProjectCode must remain ProjectCode (not projectcode)
+- Tag value 456_789 must remain 456_789
+- Example: Input "ProjectCode=456_789" → Output "ec2:ResourceTag/ProjectCode=456_789"
+- Example: Input "OneTwo=1_2" → Output "ec2:ResourceTag/OneTwo=1_2"
 
 EXAMPLES (do not repeat these):
 Example 1: "Requests by Alice to read objects in the public bucket should be allowed." → ALLOW user:alice READ bucket:public-bucket/*

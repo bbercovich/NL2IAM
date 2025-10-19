@@ -1,0 +1,7 @@
+{
+  "filename": "6.txt",
+  "input": "Requests by any user to read objects in the confidential bucket should be denied.Requests by the security role to read objects in the confidential bucket should be allowed.",
+  "dsl": "1. DENY * READ bucket:confidential-bucket/*  \n2. ALLOW role:security READ bucket:confidential-bucket/*",
+  "generation_time": 4.914599,
+  "timestamp": "2025-10-16T05:52:41.992603"
+}

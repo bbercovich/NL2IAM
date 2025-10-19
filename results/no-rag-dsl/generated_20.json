@@ -1,0 +1,7 @@
+{
+  "filename": "20.txt",
+  "input": "Requests by any user to create and delete IAM users should be allowed only for usernames that end with @domain.com.",
+  "dsl": "1. ALLOW * [iam:CreateUser,iam:DeleteUser] ON resource:* WHERE iam:username ENDSWITH @domain.com",
+  "generation_time": 3.511591,
+  "timestamp": "2025-10-16T05:54:40.521269"
+}

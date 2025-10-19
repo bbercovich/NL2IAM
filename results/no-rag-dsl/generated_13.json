@@ -1,0 +1,7 @@
+{
+  "filename": "13.txt",
+  "input": "Requests by any user to describe EC2 resources and get console output should be allowed.Requests by any user to launch EC2 instances with specific subnet, network interface, volume, AMI, key pair, and security group resources should be allowed.",
+  "dsl": "1. ALLOW * [ec2:DescribeInstances,ec2:GetConsoleOutput] ON instance:*  \n2. ALLOW * ec2:RunInstances ON instance:* WHERE ec2:Subnet=subnet-id AND ec2:NetworkInterface=network-interface-id AND ec2:Volume=volume-id AND ec2:Image=ami-id AND ec2:KeyPair=key-pair-id AND ec2:SecurityGroup=security-group-id",
+  "generation_time": 3.734895,
+  "timestamp": "2025-10-16T05:55:13.122533"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "4.txt",
+  "input": "Requests by team leaders to modify S3 bucket permissions should be allowed.Requests by interns to modify S3 bucket permissions should be denied.",
+  "dsl": "1. ALLOW role:team-leader ACTION:s3:PutBucketPolicy ON bucket:*  \n2. DENY role:intern ACTION:s3:PutBucketPolicy ON bucket:*",
+  "generation_time": 3.738145,
+  "timestamp": "2025-10-16T05:53:12.368518"
+}

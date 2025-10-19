@@ -1,0 +1,7 @@
+{
+  "filename": "44.txt",
+  "input": "Requests by any user to perform all S3 actions on the billing bucket and its contents should be allowed.",
+  "dsl": "ALLOW * ACTION:s3:* ON bucket:billing-bucket/*",
+  "generation_time": 3.171768,
+  "timestamp": "2025-10-16T05:52:56.108964"
+}

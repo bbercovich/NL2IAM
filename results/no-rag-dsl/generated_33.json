@@ -1,0 +1,7 @@
+{
+  "filename": "33.txt",
+  "input": "Requests by any user to get bucket locations and list all buckets should be allowed. Requests to list contents in the singlecomm.recordings bucket should be allowed for root and 0001 prefixes with forward slash delimiters. All S3 actions should be allowed on objects within the 0001 folder of the singlecomm.recordings bucket",
+  "dsl": "1. ALLOW * [s3:GetBucketLocation,s3:ListAllMyBuckets] ON bucket:*  \n2. ALLOW * s3:ListBucket ON bucket:singlecomm.recordings WHERE s3:prefix=[\"root/\",\"0001/\"]  \n3. ALLOW * s3:* ON bucket:singlecomm.recordings/0001/*",
+  "generation_time": 3.631142,
+  "timestamp": "2025-10-16T05:53:37.537034"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "1.txt",
+  "input": "Requests by Bob to delete objects in the audit bucket should be denied.",
+  "dsl": "DENY user:bob DELETE bucket:audit-bucket/*",
+  "generation_time": 1.581908,
+  "timestamp": "2025-10-16T05:55:27.106453"
+}

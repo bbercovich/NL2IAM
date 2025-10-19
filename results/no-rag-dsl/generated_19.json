@@ -1,0 +1,7 @@
+{
+  "filename": "19.txt",
+  "input": "Requests by any user to attach volumes to EC2 instances should be allowed only when the resources are tagged with 'mytag' containing value 'atam' (case insensitive)",
+  "dsl": "ALLOW ACTION:ec2:AttachVolume ON instance:* WHERE ec2:ResourceTag/mytag=atam",
+  "generation_time": 2.00175,
+  "timestamp": "2025-10-16T05:54:45.411808"
+}

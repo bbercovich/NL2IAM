@@ -1,0 +1,7 @@
+{
+  "filename": "31.txt",
+  "input": "Requests by any user to list all buckets and get bucket locations should be allowed. Requests by any user to list bucket contents in mybucket should be allowed for root, home, and user-specific home folders with forward slash delimiters. Requests by any user to perform all actions in their own home folder should be allowed.",
+  "dsl": "1. ALLOW ACTION:[s3:ListAllMyBuckets,s3:GetBucketLocation] ON bucket:*  \n2. ALLOW ACTION:s3:ListBucket ON bucket:mybucket WHERE s3:prefix=[\"root/\",\"home/\",\"home/${aws:username}/\"]  \n3. ALLOW ACTION:s3:* ON bucket:mybucket/home/${aws:username}/*",
+  "generation_time": 5.933722,
+  "timestamp": "2025-10-16T05:53:46.832348"
+}

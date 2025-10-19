@@ -1,0 +1,7 @@
+{
+  "filename": "46.txt",
+  "input": "Requests by any user to list contents of the test bucket should be allowed. Requests by any user to put, get, and delete objects in the test bucket should be allowed.",
+  "dsl": "1. ALLOW * s3:ListBucket ON bucket:test-bucket  \n2. ALLOW * [s3:PutObject,s3:GetObject,s3:DeleteObject] ON bucket:test-bucket/*",
+  "generation_time": 2.272836,
+  "timestamp": "2025-10-16T05:52:47.918831"
+}

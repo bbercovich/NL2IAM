@@ -1,0 +1,7 @@
+{
+  "filename": "39.txt",
+  "input": "Requests by any user to list all buckets and get bucket locations should be allowed. Requests by any user to list contents in my-bucket should be allowed for root, home, and Jas's home folder with forward slash delimiters. All S3 actions should be allowed on objects within Jas's home folder in my-bucket.",
+  "dsl": "1. ALLOW * [s3:ListAllMyBuckets,s3:GetBucketLocation] ON bucket:*\n2. ALLOW * s3:ListBucket ON bucket:my-bucket WHERE s3:prefix=[\"root/\",\"home/\",\"jas/home/\"]\n3. ALLOW * ACTION:s3:* ON bucket:my-bucket/jas/home/*",
+  "generation_time": 2.832883,
+  "timestamp": "2025-10-16T05:53:15.213108"
+}

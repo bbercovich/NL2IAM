@@ -1,0 +1,7 @@
+{
+  "filename": "37.txt",
+  "input": "Requests by any user to list bucket contents and get location of the examplebucket should be allowed. Requests by any user to perform all S3 actions in the test folder of examplebucket should be allowed.",
+  "dsl": "1. ALLOW * s3:ListBucket ON bucket:examplebucket  \n2. ALLOW * s3:GetBucketLocation ON bucket:examplebucket  \n3. ALLOW * ACTION:s3:* ON bucket:examplebucket/test/*",
+  "generation_time": 4.175613,
+  "timestamp": "2025-10-16T05:53:22.945979"
+}

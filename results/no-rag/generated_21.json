@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "iam:username": "*@domain.com"
+        }
+      }
+    }
+  ]
+}

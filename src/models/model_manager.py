@@ -444,13 +444,12 @@ RECOMMENDED_MODELS = {
         load_in_8bit=True  # For memory efficiency
     ),
     "dsl2policy_model": ModelConfig(
-        model_name="CodeLlama-7B",
-        model_type="llama",
+        model_name="GPT-4o",
+        model_type="openai",
         task="dsl2policy",
-        model_path="codellama/CodeLlama-7b-Instruct-hf",
-        max_length=2048,
-        device="auto",
-        load_in_8bit=True  # For memory efficiency
+        model_path="gpt-4o",
+        max_tokens=512,
+        temperature=0.1
     ),
     # OpenAI Models
     "nl2dsl_openai_gpt4": ModelConfig(

@@ -1,0 +1,7 @@
+{
+  "filename": "35.txt",
+  "input": "Requests by myuser to perform all S3 actions on objects in the prod--testfiles bucket should be allowed. Requests by any user except root and myuser to put objects in the prod--testfiles bucket should be denied.",
+  "dsl": "1. ALLOW user:myuser ACTION:s3:* ON bucket:prod--testfiles/*  \n2. DENY user:* ACTION:s3:PutObject ON bucket:prod--testfiles/* WHERE NOT user:root AND NOT user:myuser",
+  "generation_time": 3.66423,
+  "timestamp": "2025-10-16T05:53:30.640074"
+}

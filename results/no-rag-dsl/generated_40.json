@@ -1,0 +1,7 @@
+{
+  "filename": "40.txt",
+  "input": "Requests by role my-role to perform all S3 actions on bucket my-bucket should be allowed. Requests by any user to get objects from my-bucket should be allowed.",
+  "dsl": "1. ALLOW role:my-role ACTION:s3:* ON bucket:my-bucket  \n2. ALLOW * s3:GetObject ON bucket:my-bucket/*",
+  "generation_time": 3.768703,
+  "timestamp": "2025-10-16T05:53:08.618896"
+}

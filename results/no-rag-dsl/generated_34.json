@@ -1,0 +1,7 @@
+{
+  "filename": "34.txt",
+  "input": "Requests by any user to perform all S3 actions on all resources should be allowed. Requests by any user to perform any S3 actions on the Directory1 folder in the madeupbucketname bucket should be denied.",
+  "dsl": "1. ALLOW * ACTION:s3:* ON bucket:*  \n2. DENY * ACTION:s3:* ON bucket:madeupbucketname/directory1/*",
+  "generation_time": 3.243471,
+  "timestamp": "2025-10-16T05:53:33.893820"
+}

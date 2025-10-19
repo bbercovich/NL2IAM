@@ -1,0 +1,7 @@
+{
+  "filename": "2.txt",
+  "input": "Requests by the admin role to modify IAM roles should be allowed.",
+  "dsl": "ALLOW role:admin ACTION:iam:UpdateRole ON resource:*",
+  "generation_time": 2.868436,
+  "timestamp": "2025-10-16T05:54:43.398664"
+}

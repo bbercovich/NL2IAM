@@ -1,0 +1,7 @@
+{
+  "filename": "5.txt",
+  "input": "Requests by the HR role to access employee records should be allowed.Requests by the finance role to access salary data should be allowed.Requests by the HR role to modify salary data should be denied.",
+  "dsl": "1. ALLOW role:hr READ resource:employee-records  \n2. ALLOW role:finance READ resource:salary-data  \n3. DENY role:hr WRITE resource:salary-data",
+  "generation_time": 3.626846,
+  "timestamp": "2025-10-16T05:52:45.633527"
+}

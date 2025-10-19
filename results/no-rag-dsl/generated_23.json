@@ -1,0 +1,7 @@
+{
+  "filename": "23.txt",
+  "input": "Requests by the root account (12345667789012) to list objects in the mybucket bucket should be allowed.",
+  "dsl": "ALLOW user:12345667789012 s3:ListBucket ON bucket:mybucket",
+  "generation_time": 2.629124,
+  "timestamp": "2025-10-16T05:54:30.966644"
+}

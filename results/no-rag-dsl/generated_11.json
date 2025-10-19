@@ -1,0 +1,7 @@
+{
+  "filename": "11.txt",
+  "input": "Requests by any user to describe EC2 instances, status, attributes, regions, zones, network ACLs, reserved instances, tags, volumes, images, key pairs, security groups, and run instances should be allowed.Requests by any user to stop and start instances tagged with CodProyecto=2014_2263 should be allowed.",
+  "dsl": "1. ALLOW * ACTION:[ec2:DescribeInstances,ec2:DescribeInstanceStatus,ec2:DescribeInstanceAttribute,ec2:DescribeRegions,ec2:DescribeAvailabilityZones,ec2:DescribeNetworkAcls,ec2:DescribeReservedInstances,ec2:DescribeTags,ec2:DescribeVolumes,ec2:DescribeImages,ec2:DescribeKeyPairs,ec2:DescribeSecurityGroups,ec2:RunInstances] ON instance:*  \n2. ALLOW * ACTION:[ec2:StopInstances,ec2:StartInstances] ON instance:* WHERE ec2:ResourceTag/codproyecto=2014_2263",
+  "generation_time": 4.367132,
+  "timestamp": "2025-10-16T05:55:22.153055"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "38.txt",
+  "input": "Requests by any user to get bucket locations should be allowed. Requests by any user to list contents in the examplebucket bucket should be allowed for root and folder prefixes with forward slash delimiters. All S3 actions should be allowed on objects within the folder path of the examplebucket bucket.",
+  "dsl": "1. ALLOW * s3:GetBucketLocation ON bucket:*  \n2. ALLOW * s3:ListBucket ON bucket:examplebucket WHERE s3:prefix=[\"root/\", \"folder/\"]  \n3. ALLOW * ACTION:s3:* ON bucket:examplebucket/folder/*",
+  "generation_time": 3.536779,
+  "timestamp": "2025-10-16T05:53:18.761085"
+}

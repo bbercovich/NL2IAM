@@ -1,0 +1,7 @@
+{
+  "filename": "7.txt",
+  "input": "Requests by data analysts for read actions on the analytics bucket should be allowed.Requests by data analysts for delete actions on the analytics bucket should be denied.",
+  "dsl": "1. ALLOW role:data-analysts READ bucket:analytics/*  \n2. DENY role:data-analysts DELETE bucket:analytics/*",
+  "generation_time": 3.217514,
+  "timestamp": "2025-10-16T05:52:37.065998"
+}

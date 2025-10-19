@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::files.mydomain.com/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:Referer": [
+            "https://console.aws.amazon.com",
+            "https://www.mydomain.com"
+          ]
+        }
+      }
+    }
+  ]
+}

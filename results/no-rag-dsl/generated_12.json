@@ -1,0 +1,7 @@
+{
+  "filename": "12.txt",
+  "input": "Requests to perform all CloudFormation actions should be allowed globally.Requests to perform certain EC2 actions such as describing instances, creating security groups, authorizing security group ingress, creating tags, and running instances should also be allowed globally. Additionally, requests to run EC2 instances with specific AMIs and tags should be allowed.",
+  "dsl": "1. ALLOW * ACTION:cloudformation:* ON *\n2. ALLOW * ACTION:[ec2:DescribeInstances,ec2:CreateSecurityGroup,ec2:AuthorizeSecurityGroupIngress,ec2:CreateTags,ec2:RunInstances] ON *\n3. ALLOW * ACTION:ec2:RunInstances ON instance:* WHERE ec2:ImageId=specific-ami-id AND ec2:ResourceTag/Key=Value",
+  "generation_time": 4.64317,
+  "timestamp": "2025-10-16T05:55:17.775839"
+}

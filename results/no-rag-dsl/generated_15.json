@@ -1,0 +1,7 @@
+{
+  "filename": "15.txt",
+  "input": "Requests by any user to send commands, stop instances, view security info, and add tags should be allowed.Requests by any user to launch specific types of instances (t2.nano through t2.medium) should be allowed.",
+  "dsl": "1. ALLOW * [ec2:SendCommand,ec2:StopInstances,ec2:DescribeSecurityGroups,ec2:CreateTags] ON instance:*  \n2. ALLOW * ec2:RunInstances ON instance:* WHERE ec2:InstanceType IN [t2.nano,t2.micro,t2.small,t2.medium]",
+  "generation_time": 3.60687,
+  "timestamp": "2025-10-16T05:55:01.776048"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "3.txt",
+  "input": "Requests by any user to delete objects in the public bucket should be denied.",
+  "dsl": "DENY * DELETE bucket:public-bucket/*",
+  "generation_time": 2.40937,
+  "timestamp": "2025-10-16T05:53:51.112301"
+}

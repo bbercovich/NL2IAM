@@ -1,0 +1,7 @@
+{
+  "filename": "43.txt",
+  "input": "Requests by any user to get objects from myexamplebucket should be allowed. Requests by any user to get objects from myexamplebucket should be denied unless their userId matches AROAEXAMPLEID:, AIDAEXAMPLEID, or 111111111111.",
+  "dsl": "1. ALLOW * s3:GetObject ON bucket:myexamplebucket/*  \n2. DENY * s3:GetObject ON bucket:myexamplebucket/* WHERE aws:userid NOT IN [aroaexampleid:, aidaexampleid, 111111111111]",
+  "generation_time": 3.130925,
+  "timestamp": "2025-10-16T05:52:59.251536"
+}

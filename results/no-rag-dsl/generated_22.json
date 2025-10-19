@@ -1,0 +1,7 @@
+{
+  "filename": "22.txt",
+  "input": "Requests by any user to perform all actions on all resources should be allowed.",
+  "dsl": "ALLOW * ACTION:* ON *",
+  "generation_time": 2.254334,
+  "timestamp": "2025-10-16T05:54:33.231782"
+}

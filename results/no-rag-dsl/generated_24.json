@@ -1,0 +1,7 @@
+{
+  "filename": "24.txt",
+  "input": "Requests by any user to perform S3 actions in the myrandomnameforbucket should be allowed only when the principal is an IAM user.",
+  "dsl": "ALLOW * ACTION:s3:* ON bucket:myrandomnameforbucket WHERE aws:PrincipalType=IAMUser",
+  "generation_time": 2.355659,
+  "timestamp": "2025-10-16T05:54:28.326066"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "0.txt",
+  "input": "Requests by Alice to read objects in the public bucket should be allowed.",
+  "dsl": "ALLOW user:alice READ bucket:public-bucket/*",
+  "generation_time": 1.82358,
+  "timestamp": "2025-10-16T05:55:28.939871"
+}

@@ -1,0 +1,7 @@
+{
+  "filename": "45.txt",
+  "input": "Requests by any user to perform all actions on objects in the example bucket should be allowed only when the request comes from IP address 219.77.225.236 and the referrer is from example.com domains or specified CloudFront distributions. Requests by AWS Lambda should be allowed regardless of conditions. All other requests should be denied.",
+  "dsl": "1. ALLOW * ACTION:s3:* ON bucket:example-bucket/* WHERE aws:SourceIp=219.77.225.236 AND aws:Referer=*.example.com  \n2. ALLOW role:aws-lambda ACTION:s3:* ON bucket:example-bucket/*  \n3. DENY * ACTION:s3:* ON bucket:example-bucket/*",
+  "generation_time": 4.998114,
+  "timestamp": "2025-10-16T05:52:52.927278"
+}

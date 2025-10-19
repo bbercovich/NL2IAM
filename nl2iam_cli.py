@@ -131,10 +131,13 @@ class NL2IAMSession:
 
             # Initialize pipeline agents
             print("🔧 Creating pipeline agents...")
-            self.translator = NLToTranslator(model_manager=self.model_manager)
+            self.translator = NLToTranslator(
+                model_manager=self.model_manager,
+                rag_engine=self.rag_engine if self.use_rag else None
+            )
             self.policy_generator = PolicyGenerator(
                 model_manager=self.model_manager,
-                rag_engine=self.rag_engine
+                rag_engine=self.rag_engine if self.use_rag else None
             )
             self.redundancy_checker = RedundancyChecker(inventory_path=self.inventory_path)
             self.conflict_checker = ConflictChecker(inventory_path=self.inventory_path)

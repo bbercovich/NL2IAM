@@ -108,12 +108,12 @@ class PolicyGenerator:
             # Create basic prompt without RAG
             prompt = self._create_fallback_prompt(dsl_statement)
 
-        # Generate using CodeLlama with proven parameters
+        # Generate using model with low temperature for deterministic results
         raw_output = self.model_manager.generate(
             'dsl2policy_model',
             prompt,
             max_new_tokens=300,
-            temperature=0.1,
+            temperature=0.05,  # Very low temperature for consistent policy generation
             top_p=0.9
         )
 
@@ -211,17 +211,27 @@ class PolicyGenerator:
 
         return None
 
+    def _get_account_instruction(self, dsl_statement: str) -> str:
+        """Determine whether to use ACCOUNT_ID placeholder based on DSL content"""
+        # Check if DSL contains user: followed by an ID
+        if re.search(r'user:\d+', dsl_statement):
+            return "Use the specific account ID from the 'user:' field in the DSL statement for ARNs."
+        else:
+            return "Note: Use ACCOUNT_ID as placeholder in ARNs when no specific account is mentioned.\nExample: arn:aws:iam::ACCOUNT_ID:user/alice"
+
     def _create_fallback_prompt(self, dsl_statement: str) -> str:
         """Create fallback prompt when RAG is not available or fails"""
+        # Check if DSL contains account information
+        account_instruction = self._get_account_instruction(dsl_statement)
+
         return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
 
 DSL: {dsl_statement}
 
 Generate a complete AWS IAM policy with Version and Statement fields. Use proper AWS ARN format for resources.
-Note: Use ACCOUNT_ID as placeholder in ARNs.
-Example: arn:aws:iam::ACCOUNT_ID:user/alice
+{account_instruction}
 
-When generating tags ensure the value is the same as the given value, perseving the case.  
+When generating tags ensure the value is the same as the given value, perseving the case.
 Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
 
 Output only valid JSON without markdown formatting:"""

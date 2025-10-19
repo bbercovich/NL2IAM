@@ -1,0 +1,7 @@
+{
+  "filename": "29.txt",
+  "input": "Requests by any user to get bucket locations and list all buckets should be allowed. Requests by any user to list contents in the bluebolt bucket should be allowed for root, Production and Processing, user-specific Production folders, and Company Shared folders with forward slash delimiters. Requests by any user to list contents under Company Shared and user-specific Production folders should be allowed. Requests by any user to perform all actions on Company Shared contents and their own Production and Processing folder should be allowed. Requests by any user to access anything in the Management folder should be denied.",
+  "dsl": "1. ALLOW * [s3:GetBucketLocation,s3:ListAllMyBuckets] ON bucket:*  \n2. ALLOW * s3:ListBucket ON bucket:bluebolt WHERE s3:prefix=[\"root/\",\"production/\",\"processing/\",\"production/user/\",\"company/shared/\"]  \n3. ALLOW * s3:ListBucket ON bucket:* WHERE s3:prefix=[\"company/shared/\",\"production/user/\"]  \n4. ALLOW * ACTION:* ON bucket:* WHERE s3:prefix=[\"company/shared/\",\"production/user/\",\"processing/user/\"]  \n5. DENY * ACTION:* ON bucket:* WHERE s3:prefix=\"management/\"",
+  "generation_time": 14.268853,
+  "timestamp": "2025-10-16T05:54:05.393720"
+}
