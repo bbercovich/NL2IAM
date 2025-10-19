@@ -217,11 +217,15 @@ class PolicyGenerator:
 
 DSL: {dsl_statement}
 
-IMPORTANT: Use "ACCOUNT_ID" as the account placeholder in all ARNs when a account number is not provided.
+NOTE: Use "ACCOUNT_ID" as the account placeholder in all ARNs.
 Examples:
 - user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
 - role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
-- bucket:mybucket → "Resource": "arn:aws:s3:::mybucket/*"
+
+NOTE: If the DSL contains a valid arn with an account number in the PRINCIPAL field, use the account number in the ARN instead of ACCOUNT_ID.
+Examples:
+- PRINCIPAL:arn:aws:iam::12345678901234:root → "AWS": "arn:aws:iam::12345678901234:root"
+
 
 When generating tags ensure the value is the same as the given value, preserving the case.
 Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
