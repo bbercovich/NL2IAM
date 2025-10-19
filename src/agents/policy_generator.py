@@ -211,29 +211,22 @@ class PolicyGenerator:
 
         return None
 
-    def _get_account_instruction(self, dsl_statement: str) -> str:
-        """Determine whether to use ACCOUNT_ID placeholder based on DSL content"""
-        # Check if DSL contains user: followed by an ID
-        if re.search(r'user:\d+', dsl_statement):
-            return "Use the specific account ID from the 'user:' field in the DSL statement for ARNs."
-        else:
-            return "Note: Use ACCOUNT_ID as placeholder in ARNs when no specific account is mentioned.\nExample: arn:aws:iam::ACCOUNT_ID:user/alice"
-
     def _create_fallback_prompt(self, dsl_statement: str) -> str:
         """Create fallback prompt when RAG is not available or fails"""
-        # Check if DSL contains account information
-        account_instruction = self._get_account_instruction(dsl_statement)
-
         return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
 
 DSL: {dsl_statement}
 
-Generate a complete AWS IAM policy with Version and Statement fields. Use proper AWS ARN format for resources.
-{account_instruction}
+IMPORTANT: Use "ACCOUNT_ID" as the account placeholder in all ARNs when a account number is not provided.
+Examples:
+- user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
+- role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
+- bucket:mybucket → "Resource": "arn:aws:s3:::mybucket/*"
 
-When generating tags ensure the value is the same as the given value, perseving the case.
+When generating tags ensure the value is the same as the given value, preserving the case.
 Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
 
+Generate a complete AWS IAM policy with Version and Statement fields.
 Output only valid JSON without markdown formatting:"""
 
     def _validate_policy(self, policy: Dict) -> Dict:
