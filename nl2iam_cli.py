@@ -49,12 +49,16 @@ class NL2IAMSession:
     """Manages a single CLI session with state and configurations"""
 
     def __init__(self, debug_mode: bool = False, inventory_path: Optional[str] = None,
-                 use_rag: bool = True, skip_validation: bool = False,
+                 use_rag: bool = True, use_rag_translator: Optional[bool] = None,
+                 use_rag_policy: Optional[bool] = None, skip_validation: bool = False,
                  batch_mode: bool = False, input_dir: Optional[str] = None,
                  output_dir: Optional[str] = None):
         self.debug_mode = debug_mode
         self.inventory_path = inventory_path or "./data/policy_inventory.json"
         self.use_rag = use_rag
+        # If specific RAG flags aren't provided, use the general RAG setting
+        self.use_rag_translator = use_rag_translator if use_rag_translator is not None else use_rag
+        self.use_rag_policy = use_rag_policy if use_rag_policy is not None else use_rag
         self.skip_validation = skip_validation
         self.batch_mode = batch_mode
         self.input_dir = input_dir
@@ -133,11 +137,11 @@ class NL2IAMSession:
             print("🔧 Creating pipeline agents...")
             self.translator = NLToTranslator(
                 model_manager=self.model_manager,
-                rag_engine=self.rag_engine if self.use_rag else None
+                rag_engine=self.rag_engine if self.use_rag_translator else None
             )
             self.policy_generator = PolicyGenerator(
                 model_manager=self.model_manager,
-                rag_engine=self.rag_engine if self.use_rag else None
+                rag_engine=self.rag_engine if self.use_rag_policy else None
             )
             self.redundancy_checker = RedundancyChecker(inventory_path=self.inventory_path)
             self.conflict_checker = ConflictChecker(inventory_path=self.inventory_path)
@@ -186,8 +190,12 @@ class NL2IAMSession:
         print("   • 'stats' - Show inventory statistics")
         if self.debug_mode:
             print("🐛 Debug mode: You'll see intermediate steps and confirmations.")
-        if not self.use_rag:
-            print("🚫 RAG disabled: Policies generated without AWS documentation context.")
+        if not self.use_rag_translator and not self.use_rag_policy:
+            print("🚫 RAG disabled: Both translation and policy generation without AWS documentation context.")
+        elif not self.use_rag_translator:
+            print("🚫 RAG disabled for translator: Natural language to DSL without AWS documentation context.")
+        elif not self.use_rag_policy:
+            print("🚫 RAG disabled for policy generator: DSL to IAM policy without AWS documentation context.")
         if self.skip_validation:
             print("⚠️  Validation disabled: Redundancy and conflict checks will be skipped.")
         print()
@@ -278,8 +286,12 @@ class NL2IAMSession:
         print("🚀 NL2IAM Batch Processing Mode")
         print("=" * 60)
         print(f"📂 Input directory: {self.input_dir}")
-        if not self.use_rag:
-            print("🚫 RAG disabled")
+        if not self.use_rag_translator and not self.use_rag_policy:
+            print("🚫 RAG disabled for both translator and policy generator")
+        elif not self.use_rag_translator:
+            print("🚫 RAG disabled for translator")
+        elif not self.use_rag_policy:
+            print("🚫 RAG disabled for policy generator")
         if self.skip_validation:
             print("⚠️  Validation disabled")
         print()
@@ -742,6 +754,8 @@ Examples:
   python nl2iam_cli.py                           # Normal mode with RAG and validation
   python nl2iam_cli.py --debug                   # Debug mode with step confirmations
   python nl2iam_cli.py --no-rag                  # Generate policies without AWS documentation context
+  python nl2iam_cli.py --no-rag-translator       # Disable RAG for translator only
+  python nl2iam_cli.py --no-rag-policy           # Disable RAG for policy generator only
   python nl2iam_cli.py --skip-validation         # Skip redundancy and conflict checks
   python nl2iam_cli.py --no-rag --skip-validation # Fastest mode: no RAG, no validation
 
@@ -793,6 +807,18 @@ Natural Language Examples:
     )
 
     parser.add_argument(
+        '--no-rag-translator',
+        action='store_true',
+        help='Disable RAG for translator only (natural language to DSL conversion)'
+    )
+
+    parser.add_argument(
+        '--no-rag-policy',
+        action='store_true',
+        help='Disable RAG for policy generator only (DSL to IAM policy conversion)'
+    )
+
+    parser.add_argument(
         '--skip-validation',
         action='store_true',
         help='Skip redundancy and conflict validation checks'
@@ -819,11 +845,17 @@ Natural Language Examples:
         print(f"❌ Input directory does not exist: {args.batch}")
         sys.exit(1)
 
+    # Determine RAG settings
+    use_rag_translator = not args.no_rag_translator if hasattr(args, 'no_rag_translator') else None
+    use_rag_policy = not args.no_rag_policy if hasattr(args, 'no_rag_policy') else None
+
     # Create session
     session = NL2IAMSession(
         debug_mode=args.debug,
         inventory_path=args.inventory_path,
         use_rag=not args.no_rag,
+        use_rag_translator=use_rag_translator,
+        use_rag_policy=use_rag_policy,
         skip_validation=args.skip_validation,
         batch_mode=bool(args.batch),
         input_dir=args.batch,
