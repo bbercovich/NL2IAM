@@ -515,6 +515,26 @@ class NL2IAMSession:
         print("\n📄 Generated Policy:")
         print(json.dumps(candidate_policy, indent=2))
 
+        # Debug mode: Show policy and ask for confirmation
+        if self.debug_mode:
+            print(f"\n🐛 DEBUG MODE - Policy Review")
+            while True:
+                response = input("   ❓ Continue with this policy? (y/n/edit): ").strip().lower()
+                if response in ['y', 'yes']:
+                    break
+                elif response in ['n', 'no']:
+                    return False
+                elif response in ['e', 'edit']:
+                    new_policy = self._get_policy_edit_input()
+                    if new_policy:
+                        candidate_policy = new_policy
+                        print(f"   ✅ Using edited policy:")
+                        print(json.dumps(candidate_policy, indent=6))
+                        break
+                    # If editing failed, continue the loop
+                else:
+                    print("   Please enter 'y' (yes), 'n' (no), or 'edit'")
+
         # Step 3: Redundancy Check (if validation is enabled)
         if not self.skip_validation:
             print(f"\n🔍 Step 3: Checking for redundancy...")
@@ -701,6 +721,59 @@ class NL2IAMSession:
 
         except Exception as e:
             print(f"⚠️  Failed to save results to output directory: {e}")
+
+    def _get_policy_edit_input(self) -> Optional[Dict]:
+        """Get policy edit input from user with JSON validation"""
+        print("\n   📝 Edit the policy (paste JSON, then press Enter twice to finish):")
+        print("   " + "=" * 50)
+
+        lines = []
+        empty_line_count = 0
+
+        while True:
+            try:
+                line = input()
+                if line.strip() == "":
+                    empty_line_count += 1
+                    if empty_line_count >= 2:  # Two consecutive empty lines = done
+                        break
+                else:
+                    empty_line_count = 0
+                    lines.append(line)
+            except (EOFError, KeyboardInterrupt):
+                print("\n   ❌ Policy editing cancelled.")
+                return None
+
+        if not lines:
+            print("   ❌ No policy provided.")
+            return None
+
+        # Join lines and try to parse JSON
+        policy_text = '\n'.join(lines)
+
+        try:
+            # Parse and validate JSON
+            policy = json.loads(policy_text)
+
+            # Basic validation - check if it looks like an IAM policy
+            if not isinstance(policy, dict):
+                print("   ❌ Policy must be a JSON object.")
+                return None
+
+            if 'Version' not in policy:
+                print("   ⚠️  Warning: Policy missing 'Version' field.")
+
+            if 'Statement' not in policy:
+                print("   ❌ Policy must have a 'Statement' field.")
+                return None
+
+            print("   ✅ Policy JSON is valid.")
+            return policy
+
+        except json.JSONDecodeError as e:
+            print(f"   ❌ Invalid JSON: {e}")
+            print("   Please check your JSON syntax and try again.")
+            return None
 
     def process_policy_request_batch(self, natural_language: str, filename: str) -> Dict[str, Any]:
         """
