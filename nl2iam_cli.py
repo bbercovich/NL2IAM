@@ -525,13 +525,16 @@ class NL2IAMSession:
                 elif response in ['n', 'no']:
                     return False
                 elif response in ['e', 'edit']:
-                    new_policy = self._get_policy_edit_input()
-                    if new_policy:
-                        candidate_policy = new_policy
-                        print(f"   ✅ Using edited policy:")
+                    modification_result = self._get_policy_modification(
+                        original_natural_language=natural_language,
+                        current_policy=candidate_policy
+                    )
+                    if modification_result:
+                        candidate_policy = modification_result
+                        print(f"   ✅ Updated policy:")
                         print(json.dumps(candidate_policy, indent=6))
-                        break
-                    # If editing failed, continue the loop
+                        # Continue the loop to ask again about the new policy
+                    # If modification failed, continue the loop
                 else:
                     print("   Please enter 'y' (yes), 'n' (no), or 'edit'")
 
@@ -722,58 +725,91 @@ class NL2IAMSession:
         except Exception as e:
             print(f"⚠️  Failed to save results to output directory: {e}")
 
-    def _get_policy_edit_input(self) -> Optional[Dict]:
-        """Get policy edit input from user with JSON validation"""
-        print("\n   📝 Edit the policy (paste JSON, then press Enter twice to finish):")
+    def _get_policy_modification(self, original_natural_language: str, current_policy: Dict) -> Optional[Dict]:
+        """Get natural language modification instructions and regenerate policy"""
+        print("\n   📝 Describe how to modify the policy:")
+        print("   Examples:")
+        print("     • 'Add ListBucket permission'")
+        print("     • 'Change the resource to include all objects and the bucket itself'")
+        print("     • 'Add a condition that the request must be during business hours'")
+        print("     • 'Remove the Principal field'")
         print("   " + "=" * 50)
 
-        lines = []
-        empty_line_count = 0
-
-        while True:
-            try:
-                line = input()
-                if line.strip() == "":
-                    empty_line_count += 1
-                    if empty_line_count >= 2:  # Two consecutive empty lines = done
-                        break
-                else:
-                    empty_line_count = 0
-                    lines.append(line)
-            except (EOFError, KeyboardInterrupt):
-                print("\n   ❌ Policy editing cancelled.")
-                return None
-
-        if not lines:
-            print("   ❌ No policy provided.")
+        try:
+            modification_instruction = input("   👤 Modification: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n   ❌ Policy modification cancelled.")
             return None
 
-        # Join lines and try to parse JSON
-        policy_text = '\n'.join(lines)
+        if not modification_instruction:
+            print("   ❌ No modification instruction provided.")
+            return None
+
+        print("   🔄 Regenerating policy with your modifications...")
 
         try:
-            # Parse and validate JSON
-            policy = json.loads(policy_text)
+            # Create modification prompt for the policy generator
+            modification_prompt = self._create_policy_modification_prompt(
+                original_natural_language, current_policy, modification_instruction
+            )
 
-            # Basic validation - check if it looks like an IAM policy
-            if not isinstance(policy, dict):
-                print("   ❌ Policy must be a JSON object.")
+            # Use the policy generator to create modified policy
+            raw_output = self.policy_generator.model_manager.generate(
+                'dsl2policy_model',
+                modification_prompt,
+                max_new_tokens=300,
+                temperature=0.05,
+                top_p=0.9
+            )
+
+            # Extract JSON from the model output
+            modified_policy = self.policy_generator._extract_json_from_output(raw_output)
+
+            if modified_policy:
+                # Basic validation
+                validation_result = self.policy_generator._validate_policy(modified_policy)
+                if validation_result['warnings']:
+                    print("   ⚠️  Policy validation warnings:")
+                    for warning in validation_result['warnings']:
+                        print(f"      • {warning}")
+
+                return modified_policy
+            else:
+                print("   ❌ Failed to generate valid policy from modification.")
+                print(f"   Raw output: {raw_output[:200]}...")
                 return None
 
-            if 'Version' not in policy:
-                print("   ⚠️  Warning: Policy missing 'Version' field.")
-
-            if 'Statement' not in policy:
-                print("   ❌ Policy must have a 'Statement' field.")
-                return None
-
-            print("   ✅ Policy JSON is valid.")
-            return policy
-
-        except json.JSONDecodeError as e:
-            print(f"   ❌ Invalid JSON: {e}")
-            print("   Please check your JSON syntax and try again.")
+        except Exception as e:
+            print(f"   ❌ Error during policy modification: {e}")
             return None
+
+    def _create_policy_modification_prompt(self, original_request: str, current_policy: Dict, modification: str) -> str:
+        """Create prompt for policy modification"""
+        # Use RAG context if available
+        if self.use_rag_policy and self.rag_engine:
+            try:
+                retrieval_result = self.rag_engine.retrieve_context(f"{original_request} {modification}")
+                rag_context = f"\n\nRelevant AWS Documentation:\n{retrieval_result.augmented_prompt}"
+            except Exception:
+                rag_context = ""
+        else:
+            rag_context = ""
+
+        policy_context = self.policy_generator._create_policy_context(f"MODIFY: {modification}")
+
+        return f"""You are modifying an AWS IAM policy based on user instructions.
+
+ORIGINAL REQUEST: {original_request}
+
+CURRENT POLICY:
+{json.dumps(current_policy, indent=2)}
+
+MODIFICATION INSTRUCTION: {modification}
+
+TASK: Generate a new AWS IAM policy that incorporates the modification instruction while preserving the intent of the original request.
+{rag_context}
+
+{policy_context}"""
 
     def process_policy_request_batch(self, natural_language: str, filename: str) -> Dict[str, Any]:
         """
