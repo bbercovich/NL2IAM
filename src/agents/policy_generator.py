@@ -92,7 +92,10 @@ class PolicyGenerator:
         if self.rag_engine and self._rag_enabled:
             try:
                 retrieval_result = self.rag_engine.retrieve_context(dsl_statement)
-                prompt = retrieval_result.augmented_prompt
+                # Enhance RAG prompt with our policy context
+                rag_prompt = retrieval_result.augmented_prompt
+                policy_context = self._create_policy_context(dsl_statement)
+                prompt = f"{rag_prompt}\n\n{policy_context}"
                 retrieved_contexts = retrieval_result.retrieved_contexts
                 retrieval_metadata = retrieval_result.retrieval_metadata
 
@@ -211,17 +214,27 @@ class PolicyGenerator:
 
         return None
 
-    def _create_fallback_prompt(self, dsl_statement: str) -> str:
-        """Create fallback prompt when RAG is not available or fails"""
-        return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
-
-DSL: {dsl_statement} Note: Use ACCOUNT_ID as placeholder in ARNs.
+    def _create_policy_context(self, dsl_statement: str) -> str:
+        """Create additional context instructions for policy generation"""
+        return f"""
+IMPORTANT: When no PRINCIPAL is provided in the DSL, use ACCOUNT_ID as placeholder in ARNs.
+Examples:
+- user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
+- role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
+- PRINCIPAL:arn:aws:iam::12345678901234:root → "AWS": "arn:aws:iam::12345678901234:root"
 
 When generating tags ensure the value is the same as the given value, preserving the case.
 Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
 
+DSL to convert: {dsl_statement}
+
 Generate a complete AWS IAM policy with Version and Statement fields.
-Output only valid JSON without markdown formatting:"""
+Output only valid JSON without markdown formatting."""
+
+    def _create_fallback_prompt(self, dsl_statement: str) -> str:
+        """Create fallback prompt when RAG is not available or fails"""
+        return f"""Convert this AWS IAM DSL statement to a valid AWS IAM policy JSON:
+{self._create_policy_context(dsl_statement)}"""
 
     def _validate_policy(self, policy: Dict) -> Dict:
         """Basic validation of generated policy"""
