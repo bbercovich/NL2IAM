@@ -76,6 +76,7 @@ class NL2IAMSession:
         self.initialized = False
         self.policies_created = 0
         self.batch_results = []
+        self.interactive_file_counter = 0  # Counter for incremental file naming
 
         # Setup logging
         logging.basicConfig(
@@ -174,10 +175,18 @@ class NL2IAMSession:
             print("❌ Session not initialized. Call initialize() first.")
             return
 
+        # Setup output directory if provided
+        if self.output_dir:
+            output_path = Path(self.output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+            print(f"📁 Output directory created: {self.output_dir}")
+
         print("\n" + "=" * 60)
         print("🎯 NL2IAM Interactive Policy Generator")
         print("=" * 60)
         print("Generate AWS IAM policies from natural language descriptions.")
+        if self.output_dir:
+            print(f"💾 Results will be saved to: {self.output_dir}")
         print("")
         print("💡 Example inputs:")
         print("   • Allow Alice to read files from the public bucket")
@@ -639,11 +648,59 @@ class NL2IAMSession:
             print(f"\n📄 Final Policy (saved to inventory):")
             print(json.dumps(candidate_policy, indent=2))
 
+            # Save to output directory if provided (for interactive mode)
+            if self.output_dir:
+                self._save_interactive_result(
+                    natural_language=natural_language,
+                    dsl_output=dsl_output,
+                    policy=candidate_policy,
+                    policy_name=policy_name,
+                    policy_id=policy_id
+                )
+
             return True
 
         except Exception as e:
             print(f"❌ Failed to add policy to inventory: {e}")
             return False
+
+    def _save_interactive_result(self, natural_language: str, dsl_output: str,
+                               policy: Dict, policy_name: str, policy_id: str):
+        """Save interactive session result to output directory"""
+        try:
+            # Create file paths
+            policy_filename = f"interactive_{self.interactive_file_counter:03d}_policy.json"
+            dsl_filename = f"interactive_{self.interactive_file_counter:03d}_dsl.json"
+
+            policy_file_path = Path(self.output_dir) / policy_filename
+            dsl_file_path = Path(self.output_dir) / dsl_filename
+
+            # Save IAM policy
+            with open(policy_file_path, 'w', encoding='utf-8') as f:
+                json.dump(policy, f, indent=2)
+
+            # Save DSL and metadata
+            dsl_data = {
+                "input": natural_language,
+                "dsl": dsl_output,
+                "policy_name": policy_name,
+                "policy_id": policy_id,
+                "timestamp": datetime.now().isoformat(),
+                "session_counter": self.interactive_file_counter
+            }
+
+            with open(dsl_file_path, 'w', encoding='utf-8') as f:
+                json.dump(dsl_data, f, indent=2)
+
+            print(f"💾 Results saved:")
+            print(f"   📄 Policy: {policy_filename}")
+            print(f"   📝 DSL: {dsl_filename}")
+
+            # Increment counter for next save
+            self.interactive_file_counter += 1
+
+        except Exception as e:
+            print(f"⚠️  Failed to save results to output directory: {e}")
 
     def process_policy_request_batch(self, natural_language: str, filename: str) -> Dict[str, Any]:
         """
@@ -753,6 +810,7 @@ Examples:
   # Interactive modes
   python nl2iam_cli.py                           # Normal mode with RAG and validation
   python nl2iam_cli.py --debug                   # Debug mode with step confirmations
+  python nl2iam_cli.py --debug --output ./test_results/  # Debug mode saving results incrementally
   python nl2iam_cli.py --no-rag                  # Generate policies without AWS documentation context
   python nl2iam_cli.py --no-rag-translator       # Disable RAG for translator only
   python nl2iam_cli.py --no-rag-policy           # Disable RAG for policy generator only
@@ -835,7 +893,7 @@ Natural Language Examples:
         '--output',
         type=str,
         metavar='OUTPUT_DIR',
-        help='Output directory for generated policy JSON files (used with --batch)'
+        help='Output directory for generated policy JSON files (used with --batch or interactive mode)'
     )
 
     args = parser.parse_args()
