@@ -217,14 +217,28 @@ class PolicyGenerator:
     def _create_policy_context(self, dsl_statement: str) -> str:
         """Create additional context instructions for policy generation"""
         return f"""
-IMPORTANT: When no PRINCIPAL is provided in the DSL, use ACCOUNT_ID as placeholder in ARNs.
-Examples:
-- user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
-- role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
-- PRINCIPAL:arn:aws:iam::12345678901234:root → "AWS": "arn:aws:iam::12345678901234:root"
+IMPORTANT AWS IAM POLICY RULES:
 
-When generating tags ensure the value is the same as the given value, preserving the case.
-Example: The DSL that contains WHERE ec2:ResourceTag/OneTwo=1_2 should generate ec2:ResourceTag/OneTwo=1_2 in the policy.
+1. PRINCIPAL HANDLING:
+   - If DSL has "*" as principal, OMIT the Principal field entirely from the policy
+   - user:alice → "AWS": "arn:aws:iam::ACCOUNT_ID:user/alice"
+   - role:admin → "AWS": "arn:aws:iam::ACCOUNT_ID:role/admin"
+   - * → NO Principal field (policy applies to all principals)
+
+2. CONDITION OPERATORS - PREFER StringLike/StringNotLike:
+   - Use StringLike instead of StringEquals when possible
+   - Use StringNotLike instead of StringNotEquals when possible
+   - StringLike supports wildcards (*) for pattern matching
+   - Only use StringEquals for exact matches when wildcards are not needed
+
+   Examples:
+   - Prefix conditions: "StringLike": {{"s3:prefix": "mp3/*"}}
+   - Tag patterns: "StringLike": {{"ec2:ResourceTag/Department": "Dev*"}}
+   - User patterns: "StringNotLike": {{"aws:userId": "AROAEXAMPLEID:*"}}
+
+3. CASE PRESERVATION:
+   - Preserve exact case for all tag names and values
+   - Example: WHERE ec2:ResourceTag/OneTwo=1_2 → "ec2:ResourceTag/OneTwo": "1_2"
 
 DSL to convert: {dsl_statement}
 

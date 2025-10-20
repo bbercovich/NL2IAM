@@ -4,7 +4,7 @@
     {
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::99999999999:role/my-role"
+        "AWS": "arn:aws:iam::ACCOUNT_ID:role/my-role"
       },
       "Action": "s3:*",
       "Resource": "arn:aws:s3:::my-bucket"

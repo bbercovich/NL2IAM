@@ -131,16 +131,29 @@ DSL FORMAT:
 - Conditions: WHERE key operator value
 - Multi-statement: Number each (1., 2., etc.)
 
-CRITICAL: PRESERVE EXACT CASE for all tag names and values. Never change capitalization.
-- Tag name ProjectCode must remain ProjectCode (not projectcode)
-- Tag value 456_789 must remain 456_789
-- Example: Input "ProjectCode=456_789" → Output "ec2:ResourceTag/ProjectCode=456_789"
-- Example: Input "OneTwo=1_2" → Output "ec2:ResourceTag/OneTwo=1_2"
+IMPORTANT RULES:
+1. PRESERVE EXACT CASE for all tag names and values. Never change capitalization.
+   - Tag name ProjectCode must remain ProjectCode (not projectcode)
+   - Tag value 456_789 must remain 456_789
+   - Example: Input "ProjectCode=456_789" → Output "ec2:ResourceTag/ProjectCode=456_789"
+
+2. For "any user" or "anyone" requests, use "*" as the principal and omit the principal field in policy
+   - Example: "any user" → ALLOW * (not ALLOW user:*)
+
+3. Words like "when", "only when", "if", "provided that", "as long as" indicate CONDITIONS
+   - Always use WHERE clause for conditional statements
+   - Example: "when the prefix is 'mp3'" → WHERE s3:prefix=mp3/*
+   - Example: "only during business hours" → WHERE aws:RequestTime condition
+
+4. Do NOT put conditions in the resource path - use WHERE clause instead
+   - WRONG: ON bucket:examplebucket/mp3/*
+   - RIGHT: ON bucket:examplebucket/* WHERE s3:prefix=mp3/*
 
 EXAMPLES (do not repeat these):
 Example 1: "Requests by Alice to read objects in the public bucket should be allowed." → ALLOW user:alice READ bucket:public-bucket/*
 Example 2: "Requests by Bob to delete objects in the audit bucket should be denied." → DENY user:bob DELETE bucket:audit-bucket/*
-Example 3: "Requests by any user to attach and detach volumes from instances in the Development department should be allowed." → ALLOW ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
+Example 3: "Requests by any user to attach and detach volumes from instances in the Development department should be allowed." → ALLOW * ACTION:[ec2:AttachVolume,ec2:DetachVolume] ON instance:* WHERE ec2:ResourceTag/Department=Development
+Example 4: "Requests by any user to get objects from examplebucket should be allowed only when the prefix is 'mp3'." → ALLOW * s3:GetObject ON bucket:examplebucket/* WHERE s3:prefix=mp3/*
 
 <|user|>
 {text}
