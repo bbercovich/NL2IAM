@@ -310,9 +310,25 @@ class RedundancyChecker:
                 )
             elif result.redundancy_type == "partial":
                 recommendations.append(
-                    f"⚠️  Most permissions in the new policy are already granted by existing policies. "
-                    f"Review for optimization opportunities."
+                    f"⚠️  Some permissions in the new policy are already granted by existing policies. "
+                    f"Consider optimizing to include only new permissions."
                 )
+
+            # Try to access additional analysis data
+            try:
+                # Parse the explanation for redundant actions and suggestions
+                explanation = result.explanation
+                if "redundant actions:" in explanation.lower() or "actions:" in explanation.lower():
+                    recommendations.append(
+                        f"📝 Review explanation for specific redundant actions"
+                    )
+
+                if "suggestion:" in explanation.lower() or "optimize" in explanation.lower():
+                    recommendations.append(
+                        f"💡 See detailed explanation for optimization suggestions"
+                    )
+            except:
+                pass
 
             if result.confidence_score < 0.8:
                 recommendations.append(
@@ -441,19 +457,21 @@ class RedundancyChecker:
 
     def _create_redundancy_analysis_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str) -> str:
         """
-        Create a prompt for LLM-based redundancy analysis.
+        Create a prompt for LLM-based redundancy analysis with granular detection.
         """
-        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy is redundant with the EXISTING policy.
+        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy has redundancy with the EXISTING policy at both the whole-policy and statement/action level.
 
-A policy is redundant if:
-1. The new policy grants permissions that are already covered by the existing policy
-2. The principals in the new policy are the same as or covered by the existing policy principals
-3. The resources and actions overlap significantly
+REDUNDANCY TYPES TO CHECK:
+1. **Whole Policy Redundancy**: The entire new policy is covered by the existing policy
+2. **Statement-Level Redundancy**: Individual statements in the new policy are already covered
+3. **Action-Level Redundancy**: Specific actions within statements are already granted
+4. **Partial Redundancy**: Some permissions overlap but not all
 
-Key considerations:
+KEY ANALYSIS RULES:
 - A specific user principal (e.g., arn:aws:iam::123:user/alice) is covered by broader principals like "*" or "arn:aws:iam::123:*"
 - Specific actions are covered by broader actions (e.g., s3:GetObject is covered by s3:*)
 - Specific resources are covered by broader resources (e.g., arn:aws:s3:::bucket/file.txt is covered by arn:aws:s3:::bucket/*)
+- Check each statement and action individually, not just the whole policy
 
 NEW POLICY:
 {json.dumps(new_policy, indent=2)}
@@ -463,21 +481,25 @@ EXISTING POLICY ({existing_name}):
 
 Provide your analysis in this exact format:
 REDUNDANT: [YES/NO]
-TYPE: [identical/subset/broader_principal/broader_resource/none]
+TYPE: [identical/subset/broader_principal/broader_resource/partial/none]
 CONFIDENCE: [0.0-1.0]
-EXPLANATION: [Clear explanation of why it is or isn't redundant]
+EXPLANATION: [Detailed explanation including which specific statements/actions are redundant]
+REDUNDANT_ACTIONS: [List specific redundant actions, or "none"]
+OPTIMIZED_SUGGESTION: [Suggest how to modify the new policy to remove redundancy, or "no changes needed"]
 """
         return prompt
 
     def _parse_redundancy_response(self, response: str) -> Dict[str, Any]:
         """
-        Parse LLM response for redundancy analysis.
+        Parse LLM response for enhanced redundancy analysis.
         """
         analysis = {
             'is_redundant': False,
             'redundancy_type': 'none',
             'confidence_score': 0.0,
-            'explanation': 'No redundancy detected'
+            'explanation': 'No redundancy detected',
+            'redundant_actions': [],
+            'optimized_suggestion': 'No changes needed'
         }
 
         try:
@@ -497,7 +519,17 @@ EXPLANATION: [Clear explanation of why it is or isn't redundant]
                     except ValueError:
                         analysis['confidence_score'] = 0.5
                 elif line.startswith('EXPLANATION:'):
-                    analysis['explanation'] = line.split(':', 1)[1].strip()
+                    explanation = line.split(':', 1)[1].strip()
+                    # Handle multi-line explanations
+                    analysis['explanation'] = explanation
+                elif line.startswith('REDUNDANT_ACTIONS:'):
+                    actions_str = line.split(':', 1)[1].strip()
+                    if actions_str.lower() != 'none':
+                        # Parse list of actions (could be comma-separated)
+                        analysis['redundant_actions'] = [action.strip() for action in actions_str.split(',')]
+                elif line.startswith('OPTIMIZED_SUGGESTION:'):
+                    suggestion = line.split(':', 1)[1].strip()
+                    analysis['optimized_suggestion'] = suggestion
 
         except Exception as e:
             print(f"Warning: Failed to parse redundancy response: {e}")
@@ -531,9 +563,11 @@ NEW POLICY:
 For each existing policy, provide your analysis in this exact format:
 POLICY_1:
 REDUNDANT: [YES/NO]
-TYPE: [identical/subset/broader_principal/broader_resource/none]
+TYPE: [identical/subset/broader_principal/broader_resource/partial/none]
 CONFIDENCE: [0.0-1.0]
-EXPLANATION: [Clear explanation]
+EXPLANATION: [Detailed explanation including specific redundant statements/actions]
+REDUNDANT_ACTIONS: [List specific redundant actions, or "none"]
+OPTIMIZED_SUGGESTION: [Suggest how to modify the new policy to remove redundancy, or "no changes needed"]
 
 POLICY_2:
 [Continue for each policy...]
@@ -552,7 +586,9 @@ POLICY_2:
                 'is_redundant': False,
                 'redundancy_type': 'none',
                 'confidence_score': 0.0,
-                'explanation': 'No redundancy detected'
+                'explanation': 'No redundancy detected',
+                'redundant_actions': [],
+                'optimized_suggestion': 'No changes needed'
             })
 
         try:
@@ -581,6 +617,12 @@ POLICY_2:
                             analysis['confidence_score'] = 0.5
                     elif line.startswith('EXPLANATION:'):
                         analysis['explanation'] = line.split(':', 1)[1].strip()
+                    elif line.startswith('REDUNDANT_ACTIONS:'):
+                        actions_str = line.split(':', 1)[1].strip()
+                        if actions_str.lower() != 'none':
+                            analysis['redundant_actions'] = [action.strip() for action in actions_str.split(',')]
+                    elif line.startswith('OPTIMIZED_SUGGESTION:'):
+                        analysis['optimized_suggestion'] = line.split(':', 1)[1].strip()
 
         except Exception as e:
             print(f"Warning: Failed to parse batch redundancy response: {e}")
