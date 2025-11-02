@@ -341,13 +341,66 @@ class RedundancyChecker:
     def _llm_check_redundancy(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
         """
         Use LLM to intelligently check for redundancy with proper principal analysis.
+        Optimized to batch multiple policies for efficiency.
         """
         redundancy_results = []
 
         if not self.model_manager:
             raise ValueError("Model manager is required for LLM-based redundancy checking. This research system requires LLM analysis.")
 
-        for existing_policy_data in existing_policies:
+        # Batch process policies in groups to reduce API calls
+        batch_size = 5  # Process 5 policies per LLM call
+
+        for i in range(0, len(existing_policies), batch_size):
+            batch = existing_policies[i:i+batch_size]
+
+            # Create prompt for batch analysis
+            prompt = self._create_batch_redundancy_analysis_prompt(new_policy, batch)
+
+            # Get LLM analysis for the batch
+            try:
+                response = self.model_manager.generate(
+                    'dsl2policy_model',
+                    prompt,
+                    max_new_tokens=400,  # More tokens for batch response
+                    temperature=0.1,
+                    top_p=0.9
+                )
+
+                # Parse batch response
+                batch_analyses = self._parse_batch_redundancy_response(response, batch)
+
+                # Process each analysis in the batch
+                for j, analysis in enumerate(batch_analyses):
+                    if analysis['is_redundant']:
+                        existing_policy_data = batch[j]
+                        from core.inventory import RedundancyResult
+                        redundancy_result = RedundancyResult(
+                            is_redundant=True,
+                            redundant_policy_id=existing_policy_data['id'],
+                            redundancy_type=analysis['redundancy_type'],
+                            explanation=analysis['explanation'],
+                            new_policy_statements=new_policy.get('Statement', []),
+                            existing_policy_statements=existing_policy_data['policy'].get('Statement', []),
+                            confidence_score=analysis['confidence_score']
+                        )
+                        redundancy_results.append(redundancy_result)
+
+            except Exception as e:
+                # Fallback to individual analysis for this batch
+                print(f"Warning: Batch analysis failed, falling back to individual analysis: {e}")
+                batch_results = self._individual_redundancy_check(new_policy, batch)
+                redundancy_results.extend(batch_results)
+
+        return redundancy_results
+
+    def _individual_redundancy_check(self, new_policy: Dict[str, Any], policies_batch: List[Dict[str, Any]]) -> List:
+        """
+        Fallback method for individual policy checking when batch fails.
+        """
+        redundancy_results = []
+
+        for existing_policy_data in policies_batch:
             existing_policy = existing_policy_data['policy']
             existing_name = existing_policy_data['name']
             existing_id = existing_policy_data['id']
@@ -450,6 +503,89 @@ EXPLANATION: [Clear explanation of why it is or isn't redundant]
             print(f"Warning: Failed to parse redundancy response: {e}")
 
         return analysis
+
+    def _create_batch_redundancy_analysis_prompt(self, new_policy: Dict[str, Any], existing_policies_batch: List[Dict[str, Any]]) -> str:
+        """
+        Create a prompt for batch LLM-based redundancy analysis.
+        """
+        existing_policies_text = ""
+        for i, policy_data in enumerate(existing_policies_batch):
+            existing_policies_text += f"\nEXISTING POLICY {i+1} ({policy_data['name']}):\n{json.dumps(policy_data['policy'], indent=2)}\n"
+
+        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy is redundant with any of the EXISTING policies.
+
+A policy is redundant if:
+1. The new policy grants permissions that are already covered by an existing policy
+2. The principals in the new policy are the same as or covered by the existing policy principals
+3. The resources and actions overlap significantly
+
+Key considerations:
+- A specific user principal (e.g., arn:aws:iam::123:user/alice) is covered by broader principals like "*" or "arn:aws:iam::123:*"
+- Specific actions are covered by broader actions (e.g., s3:GetObject is covered by s3:*)
+- Specific resources are covered by broader resources (e.g., arn:aws:s3:::bucket/file.txt is covered by arn:aws:s3:::bucket/*)
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+{existing_policies_text}
+
+For each existing policy, provide your analysis in this exact format:
+POLICY_1:
+REDUNDANT: [YES/NO]
+TYPE: [identical/subset/broader_principal/broader_resource/none]
+CONFIDENCE: [0.0-1.0]
+EXPLANATION: [Clear explanation]
+
+POLICY_2:
+[Continue for each policy...]
+"""
+        return prompt
+
+    def _parse_batch_redundancy_response(self, response: str, policies_batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Parse LLM batch response for redundancy analysis.
+        """
+        analyses = []
+
+        # Initialize default analyses for all policies in batch
+        for _ in policies_batch:
+            analyses.append({
+                'is_redundant': False,
+                'redundancy_type': 'none',
+                'confidence_score': 0.0,
+                'explanation': 'No redundancy detected'
+            })
+
+        try:
+            # Split response by policy sections
+            policy_sections = response.split('POLICY_')
+
+            for i, section in enumerate(policy_sections[1:]):  # Skip first empty section
+                if i >= len(analyses):
+                    break
+
+                lines = section.strip().split('\n')
+                analysis = analyses[i]
+
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('REDUNDANT:'):
+                        redundant_val = line.split(':', 1)[1].strip().upper()
+                        analysis['is_redundant'] = redundant_val in ['YES', 'TRUE']
+                    elif line.startswith('TYPE:'):
+                        analysis['redundancy_type'] = line.split(':', 1)[1].strip().lower()
+                    elif line.startswith('CONFIDENCE:'):
+                        try:
+                            confidence_str = line.split(':', 1)[1].strip()
+                            analysis['confidence_score'] = float(confidence_str)
+                        except ValueError:
+                            analysis['confidence_score'] = 0.5
+                    elif line.startswith('EXPLANATION:'):
+                        analysis['explanation'] = line.split(':', 1)[1].strip()
+
+        except Exception as e:
+            print(f"Warning: Failed to parse batch redundancy response: {e}")
+
+        return analyses
 
     def _save_inventory(self, inventory_path: str) -> None:
         """Save policies to persistent storage."""

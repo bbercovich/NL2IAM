@@ -344,13 +344,69 @@ class ConflictChecker:
     def _llm_check_conflicts(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
         """
         Use LLM to intelligently check for conflicts with proper ALLOW/DENY logic.
+        Optimized to batch multiple policies for efficiency.
         """
         conflict_results = []
 
         if not self.model_manager:
             raise ValueError("Model manager is required for LLM-based conflict checking. This research system requires LLM analysis.")
 
-        for existing_policy_data in existing_policies:
+        # Batch process policies in groups to reduce API calls
+        batch_size = 5  # Process 5 policies per LLM call
+
+        for i in range(0, len(existing_policies), batch_size):
+            batch = existing_policies[i:i+batch_size]
+
+            # Create prompt for batch analysis
+            prompt = self._create_batch_conflict_analysis_prompt(new_policy, batch)
+
+            # Get LLM analysis for the batch
+            try:
+                response = self.model_manager.generate(
+                    'dsl2policy_model',
+                    prompt,
+                    max_new_tokens=400,  # More tokens for batch response
+                    temperature=0.1,
+                    top_p=0.9
+                )
+
+                # Parse batch response
+                batch_analyses = self._parse_batch_conflict_response(response, batch)
+
+                # Process each analysis in the batch
+                for j, analysis in enumerate(batch_analyses):
+                    if analysis['has_conflict']:
+                        existing_policy_data = batch[j]
+                        from core.inventory import ConflictResult
+                        conflict_result = ConflictResult(
+                            has_conflict=True,
+                            conflicting_policy_id=existing_policy_data['id'],
+                            conflict_type=analysis['conflict_type'],
+                            explanation=analysis['explanation'],
+                            conflicting_statements=[],
+                            affected_actions=set(analysis.get('affected_actions', [])),
+                            affected_resources=set(analysis.get('affected_resources', [])),
+                            affected_principals=set(analysis.get('affected_principals', [])),
+                            severity=analysis['severity'],
+                            confidence_score=analysis['confidence_score']
+                        )
+                        conflict_results.append(conflict_result)
+
+            except Exception as e:
+                # Fallback to individual analysis for this batch
+                print(f"Warning: Batch analysis failed, falling back to individual analysis: {e}")
+                batch_results = self._individual_conflict_check(new_policy, batch)
+                conflict_results.extend(batch_results)
+
+        return conflict_results
+
+    def _individual_conflict_check(self, new_policy: Dict[str, Any], policies_batch: List[Dict[str, Any]]) -> List:
+        """
+        Fallback method for individual policy checking when batch fails.
+        """
+        conflict_results = []
+
+        for existing_policy_data in policies_batch:
             existing_policy = existing_policy_data['policy']
             existing_name = existing_policy_data['name']
             existing_id = existing_policy_data['id']
@@ -462,6 +518,95 @@ EXPLANATION: [Clear explanation of the conflict or why there is no conflict]
             print(f"Warning: Failed to parse conflict response: {e}")
 
         return analysis
+
+    def _create_batch_conflict_analysis_prompt(self, new_policy: Dict[str, Any], existing_policies_batch: List[Dict[str, Any]]) -> str:
+        """
+        Create a prompt for batch LLM-based conflict analysis.
+        """
+        existing_policies_text = ""
+        for i, policy_data in enumerate(existing_policies_batch):
+            existing_policies_text += f"\nEXISTING POLICY {i+1} ({policy_data['name']}):\n{json.dumps(policy_data['policy'], indent=2)}\n"
+
+        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy conflicts with any of the EXISTING policies.
+
+A conflict occurs when:
+1. NEW policy has ALLOW statements that grant permissions for the same resources/actions that are DENIED by EXISTING policy for the same or overlapping principals
+2. NEW policy has DENY statements that deny permissions for the same resources/actions that are ALLOWED by EXISTING policy for the same or overlapping principals
+
+Key considerations:
+- Principals must overlap: specific user (arn:aws:iam::123:user/alice) overlaps with broader principals like "*" or "arn:aws:iam::123:*"
+- Actions must overlap: specific actions conflict with broader actions (e.g., s3:GetObject conflicts with s3:*)
+- Resources must overlap: specific resources conflict with broader resources (e.g., arn:aws:s3:::bucket/file.txt conflicts with arn:aws:s3:::bucket/*)
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+{existing_policies_text}
+
+For each existing policy, provide your analysis in this exact format:
+POLICY_1:
+CONFLICT: [YES/NO]
+TYPE: [allow_vs_deny/deny_vs_allow/none]
+SEVERITY: [high/medium/low]
+CONFIDENCE: [0.0-1.0]
+EXPLANATION: [Clear explanation]
+
+POLICY_2:
+[Continue for each policy...]
+"""
+        return prompt
+
+    def _parse_batch_conflict_response(self, response: str, policies_batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Parse LLM batch response for conflict analysis.
+        """
+        analyses = []
+
+        # Initialize default analyses for all policies in batch
+        for _ in policies_batch:
+            analyses.append({
+                'has_conflict': False,
+                'conflict_type': 'none',
+                'severity': 'low',
+                'confidence_score': 0.0,
+                'explanation': 'No conflicts detected',
+                'affected_actions': [],
+                'affected_resources': [],
+                'affected_principals': []
+            })
+
+        try:
+            # Split response by policy sections
+            policy_sections = response.split('POLICY_')
+
+            for i, section in enumerate(policy_sections[1:]):  # Skip first empty section
+                if i >= len(analyses):
+                    break
+
+                lines = section.strip().split('\n')
+                analysis = analyses[i]
+
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('CONFLICT:'):
+                        conflict_val = line.split(':', 1)[1].strip().upper()
+                        analysis['has_conflict'] = conflict_val in ['YES', 'TRUE']
+                    elif line.startswith('TYPE:'):
+                        analysis['conflict_type'] = line.split(':', 1)[1].strip().lower()
+                    elif line.startswith('SEVERITY:'):
+                        analysis['severity'] = line.split(':', 1)[1].strip().lower()
+                    elif line.startswith('CONFIDENCE:'):
+                        try:
+                            confidence_str = line.split(':', 1)[1].strip()
+                            analysis['confidence_score'] = float(confidence_str)
+                        except ValueError:
+                            analysis['confidence_score'] = 0.5
+                    elif line.startswith('EXPLANATION:'):
+                        analysis['explanation'] = line.split(':', 1)[1].strip()
+
+        except Exception as e:
+            print(f"Warning: Failed to parse batch conflict response: {e}")
+
+        return analyses
 
     def _save_inventory(self, inventory_path: str) -> None:
         """Save policies to persistent storage."""

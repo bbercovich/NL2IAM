@@ -1005,6 +1005,12 @@ Natural Language Examples:
         help='Output directory for generated policy JSON files (used with --batch or interactive mode)'
     )
 
+    parser.add_argument(
+        '--clear-inventory',
+        action='store_true',
+        help='Clear the policy inventory before starting (useful for clean testing)'
+    )
+
     args = parser.parse_args()
 
     # Validate batch mode arguments
@@ -1015,6 +1021,15 @@ Natural Language Examples:
     # Determine RAG settings
     use_rag_translator = not args.no_rag_translator if hasattr(args, 'no_rag_translator') else None
     use_rag_policy = not args.no_rag_policy if hasattr(args, 'no_rag_policy') else None
+
+    # Clear inventory if requested
+    if args.clear_inventory:
+        inventory_path = args.inventory_path or "./data/policy_inventory.json"
+        if Path(inventory_path).exists():
+            Path(inventory_path).unlink()
+            print(f"🗑️  Cleared policy inventory: {inventory_path}")
+        else:
+            print(f"📝 No inventory file found at {inventory_path}")
 
     # Create session
     session = NL2IAMSession(
