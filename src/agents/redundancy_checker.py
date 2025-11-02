@@ -38,24 +38,28 @@ class RedundancyCheckResult:
 
 class RedundancyChecker:
     """
-    Redundancy Checker Agent for IAM Policy Validation Pipeline
+    LLM-Based Redundancy Checker Agent for IAM Policy Validation Pipeline
 
-    As specified in the paper architecture:
-    - Rule-based engine comparing new policy against Policy Inventory
+    Research implementation using LLM-only analysis:
+    - Requires LLM model manager for operation (no fallback to rule-based)
+    - Uses LLM to intelligently assess redundancy with proper principal checking
     - Detects redundancy patterns including identical policies and subset permissions
     - Provides detailed analysis with explanations
     - Outputs recommendations for policy optimization
+    - Returns errors if LLM is unavailable (research requirement)
     """
 
-    def __init__(self, inventory_path: Optional[str] = None):
+    def __init__(self, inventory_path: Optional[str] = None, model_manager=None):
         """
         Initialize the redundancy checker.
 
         Args:
             inventory_path: Optional path to persistent policy inventory
+            model_manager: Model manager for LLM-based analysis
         """
         self.inventory = PolicyInventory()
         self.inventory_path = inventory_path
+        self.model_manager = model_manager
 
         # Load existing policies if inventory path provided
         if inventory_path and Path(inventory_path).exists():
@@ -68,7 +72,7 @@ class RedundancyChecker:
         add_to_inventory: bool = True
     ) -> RedundancyCheckResult:
         """
-        Check if a new policy is redundant with existing policies.
+        Check if a new policy is redundant with existing policies using LLM analysis.
 
         Args:
             new_policy: The IAM policy JSON to check for redundancy
@@ -90,8 +94,32 @@ class RedundancyChecker:
                     error_message="Policy must have Version and Statement fields"
                 )
 
-            # Check for redundancy
-            redundancy_results = self.inventory.find_redundant_policies(new_policy)
+            # Get all existing policies
+            existing_policies = self.list_policies()
+
+            # If no existing policies, no redundancy possible
+            if not existing_policies:
+                if add_to_inventory:
+                    policy_id = self.inventory.add_policy(
+                        new_policy,
+                        name=policy_name or f"Policy-{len(self.inventory.policies) + 1}"
+                    )
+                    if self.inventory_path:
+                        self._save_inventory(self.inventory_path)
+                    summary = f"No existing policies to check against. Policy added with ID: {policy_id[:8]}"
+                else:
+                    summary = "No existing policies to check against."
+
+                return RedundancyCheckResult(
+                    success=True,
+                    has_redundancy=False,
+                    redundancy_results=[],
+                    summary=summary,
+                    recommendations=["✅ No redundancy detected. Policy can be safely created."]
+                )
+
+            # Use LLM-based redundancy checking
+            redundancy_results = self._llm_check_redundancy(new_policy, existing_policies)
 
             # Generate summary and recommendations
             summary = self._generate_summary(redundancy_results, policy_name)
@@ -309,6 +337,119 @@ class RedundancyChecker:
                 )
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Warning: Could not load inventory from {inventory_path}: {e}")
+
+    def _llm_check_redundancy(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
+        """
+        Use LLM to intelligently check for redundancy with proper principal analysis.
+        """
+        redundancy_results = []
+
+        if not self.model_manager:
+            raise ValueError("Model manager is required for LLM-based redundancy checking. This research system requires LLM analysis.")
+
+        for existing_policy_data in existing_policies:
+            existing_policy = existing_policy_data['policy']
+            existing_name = existing_policy_data['name']
+            existing_id = existing_policy_data['id']
+
+            # Create prompt for LLM analysis
+            prompt = self._create_redundancy_analysis_prompt(new_policy, existing_policy, existing_name)
+
+            # Get LLM analysis
+            try:
+                response = self.model_manager.generate(
+                    'dsl2policy_model',
+                    prompt,
+                    max_new_tokens=200,
+                    temperature=0.1,
+                    top_p=0.9
+                )
+
+                # Parse LLM response
+                analysis = self._parse_redundancy_response(response)
+
+                if analysis['is_redundant']:
+                    from core.inventory import RedundancyResult
+                    redundancy_result = RedundancyResult(
+                        is_redundant=True,
+                        redundant_policy_id=existing_id,
+                        redundancy_type=analysis['redundancy_type'],
+                        explanation=analysis['explanation'],
+                        new_policy_statements=new_policy.get('Statement', []),
+                        existing_policy_statements=existing_policy.get('Statement', []),
+                        confidence_score=analysis['confidence_score']
+                    )
+                    redundancy_results.append(redundancy_result)
+
+            except Exception as e:
+                raise RuntimeError(f"LLM analysis failed for policy {existing_name}: {e}. LLM-based analysis is required for this research system.")
+
+        return redundancy_results
+
+    def _create_redundancy_analysis_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str) -> str:
+        """
+        Create a prompt for LLM-based redundancy analysis.
+        """
+        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy is redundant with the EXISTING policy.
+
+A policy is redundant if:
+1. The new policy grants permissions that are already covered by the existing policy
+2. The principals in the new policy are the same as or covered by the existing policy principals
+3. The resources and actions overlap significantly
+
+Key considerations:
+- A specific user principal (e.g., arn:aws:iam::123:user/alice) is covered by broader principals like "*" or "arn:aws:iam::123:*"
+- Specific actions are covered by broader actions (e.g., s3:GetObject is covered by s3:*)
+- Specific resources are covered by broader resources (e.g., arn:aws:s3:::bucket/file.txt is covered by arn:aws:s3:::bucket/*)
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+
+EXISTING POLICY ({existing_name}):
+{json.dumps(existing_policy, indent=2)}
+
+Provide your analysis in this exact format:
+REDUNDANT: [YES/NO]
+TYPE: [identical/subset/broader_principal/broader_resource/none]
+CONFIDENCE: [0.0-1.0]
+EXPLANATION: [Clear explanation of why it is or isn't redundant]
+"""
+        return prompt
+
+    def _parse_redundancy_response(self, response: str) -> Dict[str, Any]:
+        """
+        Parse LLM response for redundancy analysis.
+        """
+        analysis = {
+            'is_redundant': False,
+            'redundancy_type': 'none',
+            'confidence_score': 0.0,
+            'explanation': 'No redundancy detected'
+        }
+
+        try:
+            lines = response.strip().split('\n')
+
+            for line in lines:
+                line = line.strip()
+                if line.startswith('REDUNDANT:'):
+                    redundant_val = line.split(':', 1)[1].strip().upper()
+                    analysis['is_redundant'] = redundant_val in ['YES', 'TRUE']
+                elif line.startswith('TYPE:'):
+                    analysis['redundancy_type'] = line.split(':', 1)[1].strip().lower()
+                elif line.startswith('CONFIDENCE:'):
+                    try:
+                        confidence_str = line.split(':', 1)[1].strip()
+                        analysis['confidence_score'] = float(confidence_str)
+                    except ValueError:
+                        analysis['confidence_score'] = 0.5
+                elif line.startswith('EXPLANATION:'):
+                    analysis['explanation'] = line.split(':', 1)[1].strip()
+
+        except Exception as e:
+            print(f"Warning: Failed to parse redundancy response: {e}")
+
+        return analysis
 
     def _save_inventory(self, inventory_path: str) -> None:
         """Save policies to persistent storage."""

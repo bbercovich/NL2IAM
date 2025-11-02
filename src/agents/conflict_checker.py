@@ -40,24 +40,28 @@ class ConflictCheckResult:
 
 class ConflictChecker:
     """
-    Conflict Checker Agent for IAM Policy Validation Pipeline
+    LLM-Based Conflict Checker Agent for IAM Policy Validation Pipeline
 
-    As specified in the paper architecture:
-    - Rule-based engine comparing new policy against Policy Inventory
-    - Detects Allow vs Deny conflicts and overlapping permissions
+    Research implementation using LLM-only analysis:
+    - Requires LLM model manager for operation (no fallback to rule-based)
+    - Uses LLM to intelligently detect Allow vs Deny conflicts with proper principal checking
+    - Detects conflicts when ALLOW and DENY affect same resources for same/overlapping principals
     - Provides risk-based severity classification
     - Outputs detailed analysis with explanations and recommendations
+    - Returns errors if LLM is unavailable (research requirement)
     """
 
-    def __init__(self, inventory_path: Optional[str] = None):
+    def __init__(self, inventory_path: Optional[str] = None, model_manager=None):
         """
         Initialize the conflict checker.
 
         Args:
             inventory_path: Optional path to persistent policy inventory
+            model_manager: Model manager for LLM-based analysis
         """
         self.inventory = PolicyInventory()
         self.inventory_path = inventory_path
+        self.model_manager = model_manager
 
         # Load existing policies if inventory path provided
         if inventory_path and Path(inventory_path).exists():
@@ -69,7 +73,7 @@ class ConflictChecker:
         policy_name: Optional[str] = None
     ) -> ConflictCheckResult:
         """
-        Check if a new policy conflicts with existing policies.
+        Check if a new policy conflicts with existing policies using LLM analysis.
 
         Args:
             new_policy: The IAM policy JSON to check for conflicts
@@ -91,8 +95,22 @@ class ConflictChecker:
                     error_message="Policy must have Version and Statement fields"
                 )
 
-            # Check for conflicts
-            conflict_results = self.inventory.find_conflicting_policies(new_policy)
+            # Get all existing policies
+            existing_policies = self.list_policies()
+
+            # If no existing policies, no conflicts possible
+            if not existing_policies:
+                return ConflictCheckResult(
+                    success=True,
+                    has_conflicts=False,
+                    conflict_results=[],
+                    overall_risk_level="none",
+                    summary="No existing policies to check against.",
+                    recommendations=["✅ No conflicts detected. Policy can be safely created."]
+                )
+
+            # Use LLM-based conflict checking
+            conflict_results = self._llm_check_conflicts(new_policy, existing_policies)
 
             # Generate summary and recommendations
             summary = self._generate_conflict_summary(conflict_results, policy_name)
@@ -322,6 +340,128 @@ class ConflictChecker:
                 )
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Warning: Could not load inventory from {inventory_path}: {e}")
+
+    def _llm_check_conflicts(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
+        """
+        Use LLM to intelligently check for conflicts with proper ALLOW/DENY logic.
+        """
+        conflict_results = []
+
+        if not self.model_manager:
+            raise ValueError("Model manager is required for LLM-based conflict checking. This research system requires LLM analysis.")
+
+        for existing_policy_data in existing_policies:
+            existing_policy = existing_policy_data['policy']
+            existing_name = existing_policy_data['name']
+            existing_id = existing_policy_data['id']
+
+            # Create prompt for LLM analysis
+            prompt = self._create_conflict_analysis_prompt(new_policy, existing_policy, existing_name)
+
+            # Get LLM analysis
+            try:
+                response = self.model_manager.generate(
+                    'dsl2policy_model',
+                    prompt,
+                    max_new_tokens=200,
+                    temperature=0.1,
+                    top_p=0.9
+                )
+
+                # Parse LLM response
+                analysis = self._parse_conflict_response(response)
+
+                if analysis['has_conflict']:
+                    from core.inventory import ConflictResult
+                    conflict_result = ConflictResult(
+                        has_conflict=True,
+                        conflicting_policy_id=existing_id,
+                        conflict_type=analysis['conflict_type'],
+                        explanation=analysis['explanation'],
+                        conflicting_statements=[],
+                        affected_actions=set(analysis.get('affected_actions', [])),
+                        affected_resources=set(analysis.get('affected_resources', [])),
+                        affected_principals=set(analysis.get('affected_principals', [])),
+                        severity=analysis['severity'],
+                        confidence_score=analysis['confidence_score']
+                    )
+                    conflict_results.append(conflict_result)
+
+            except Exception as e:
+                raise RuntimeError(f"LLM analysis failed for policy {existing_name}: {e}. LLM-based analysis is required for this research system.")
+
+        return conflict_results
+
+    def _create_conflict_analysis_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str) -> str:
+        """
+        Create a prompt for LLM-based conflict analysis.
+        """
+        prompt = f"""You are an AWS IAM policy expert. Analyze if the NEW policy conflicts with the EXISTING policy.
+
+A conflict occurs when:
+1. NEW policy has ALLOW statements that grant permissions for the same resources/actions that are DENIED by EXISTING policy for the same or overlapping principals
+2. NEW policy has DENY statements that deny permissions for the same resources/actions that are ALLOWED by EXISTING policy for the same or overlapping principals
+
+Key considerations:
+- Principals must overlap: specific user (arn:aws:iam::123:user/alice) overlaps with broader principals like "*" or "arn:aws:iam::123:*"
+- Actions must overlap: specific actions conflict with broader actions (e.g., s3:GetObject conflicts with s3:*)
+- Resources must overlap: specific resources conflict with broader resources (e.g., arn:aws:s3:::bucket/file.txt conflicts with arn:aws:s3:::bucket/*)
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+
+EXISTING POLICY ({existing_name}):
+{json.dumps(existing_policy, indent=2)}
+
+Provide your analysis in this exact format:
+CONFLICT: [YES/NO]
+TYPE: [allow_vs_deny/deny_vs_allow/none]
+SEVERITY: [high/medium/low]
+CONFIDENCE: [0.0-1.0]
+EXPLANATION: [Clear explanation of the conflict or why there is no conflict]
+"""
+        return prompt
+
+    def _parse_conflict_response(self, response: str) -> Dict[str, Any]:
+        """
+        Parse LLM response for conflict analysis.
+        """
+        analysis = {
+            'has_conflict': False,
+            'conflict_type': 'none',
+            'severity': 'low',
+            'confidence_score': 0.0,
+            'explanation': 'No conflicts detected',
+            'affected_actions': [],
+            'affected_resources': [],
+            'affected_principals': []
+        }
+
+        try:
+            lines = response.strip().split('\n')
+
+            for line in lines:
+                line = line.strip()
+                if line.startswith('CONFLICT:'):
+                    conflict_val = line.split(':', 1)[1].strip().upper()
+                    analysis['has_conflict'] = conflict_val in ['YES', 'TRUE']
+                elif line.startswith('TYPE:'):
+                    analysis['conflict_type'] = line.split(':', 1)[1].strip().lower()
+                elif line.startswith('SEVERITY:'):
+                    analysis['severity'] = line.split(':', 1)[1].strip().lower()
+                elif line.startswith('CONFIDENCE:'):
+                    try:
+                        confidence_str = line.split(':', 1)[1].strip()
+                        analysis['confidence_score'] = float(confidence_str)
+                    except ValueError:
+                        analysis['confidence_score'] = 0.5
+                elif line.startswith('EXPLANATION:'):
+                    analysis['explanation'] = line.split(':', 1)[1].strip()
+
+        except Exception as e:
+            print(f"Warning: Failed to parse conflict response: {e}")
+
+        return analysis
 
     def _save_inventory(self, inventory_path: str) -> None:
         """Save policies to persistent storage."""
