@@ -66,6 +66,7 @@ class RAGEngine:
     def initialize_knowledge_base(self, aws_docs_path: str) -> bool:
         """
         Initialize the knowledge base by processing AWS IAM documentation.
+        Only processes if the vector store is empty.
 
         Args:
             aws_docs_path: Path to AWS IAM User Guide PDF
@@ -75,6 +76,15 @@ class RAGEngine:
         """
         try:
             self.logger.info("Initializing RAG knowledge base...")
+
+            # Check if vector store already has data
+            stats = self.vector_store.get_collection_stats()
+            total_chunks = stats.get('total_chunks', 0)
+
+            if total_chunks > 0:
+                self.logger.info(f"Vector store already contains {total_chunks} chunks - skipping document processing")
+                self.logger.info("Knowledge base ready for use")
+                return True
 
             # Check if documentation file exists
             if not Path(aws_docs_path).exists():
