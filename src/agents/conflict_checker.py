@@ -100,6 +100,11 @@ class ConflictChecker:
             # Get all existing policies
             existing_policies = self.list_policies()
 
+            # Debug: Show how many existing policies we're checking against
+            print(f"DEBUG - Conflict checker found {len(existing_policies)} existing policies to check against")
+            for i, policy in enumerate(existing_policies):
+                print(f"  Policy {i+1}: {policy['name']} (ID: {policy['id'][:8]}...)")
+
             # If no existing policies, no conflicts possible
             if not existing_policies:
                 return ConflictCheckResult(
