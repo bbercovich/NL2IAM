@@ -389,6 +389,11 @@ class RedundancyChecker:
                 # Parse simple response
                 is_redundant, explanation = self._parse_simple_response(response)
 
+                # Debug: Print the LLM response
+                print(f"DEBUG - LLM Response for redundancy check with {existing_name}:")
+                print(f"Response: {response[:200]}...")
+                print(f"Parsed - Redundant: {is_redundant}, Explanation: {explanation[:100]}...")
+
                 if is_redundant:
                     from core.inventory import RedundancyResult
                     redundancy_result = RedundancyResult(

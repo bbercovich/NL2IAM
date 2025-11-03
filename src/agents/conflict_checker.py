@@ -376,6 +376,11 @@ class ConflictChecker:
                 # Parse simple response
                 has_conflict, explanation = self._parse_simple_response(response)
 
+                # Debug: Print the LLM response
+                print(f"DEBUG - LLM Response for conflict check with {existing_name}:")
+                print(f"Response: {response[:200]}...")
+                print(f"Parsed - Conflict: {has_conflict}, Explanation: {explanation[:100]}...")
+
                 if has_conflict:
                     from core.inventory import ConflictResult
                     conflict_result = ConflictResult(
