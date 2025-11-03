@@ -563,17 +563,17 @@ class NL2IAMSession:
                     print(f"      Confidence: {result.confidence_score:.2f}")
                     print(f"      Explanation: {result.explanation}")
 
-                    # Show conflicting policy
-                    conflicting_policy_id = result.conflicting_policy_id
-                    conflicting_policies = self.redundancy_checker.list_policies()
-                    conflicting_policy = next(
-                        (p for p in conflicting_policies if p['id'] == conflicting_policy_id),
+                    # Show redundant policy
+                    redundant_policy_id = result.redundant_policy_id
+                    redundant_policies = self.redundancy_checker.list_policies()
+                    redundant_policy = next(
+                        (p for p in redundant_policies if p['id'] == redundant_policy_id),
                         None
                     )
 
-                    if conflicting_policy:
-                        print(f"      📄 Existing Policy '{conflicting_policy['name']}':")
-                        print(json.dumps(conflicting_policy['policy'], indent=8))
+                    if redundant_policy:
+                        print(f"      📄 Existing Policy '{redundant_policy['name']}':")
+                        print(json.dumps(redundant_policy['policy'], indent=8))
 
                 # Show recommendations
                 print(f"\n   💡 Recommendations:")
