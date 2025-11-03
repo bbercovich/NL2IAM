@@ -144,8 +144,8 @@ class NL2IAMSession:
                 model_manager=self.model_manager,
                 rag_engine=self.rag_engine if self.use_rag_policy else None
             )
-            self.redundancy_checker = RedundancyChecker(inventory_path=self.inventory_path, model_manager=self.model_manager)
-            self.conflict_checker = ConflictChecker(inventory_path=self.inventory_path, model_manager=self.model_manager)
+            self.redundancy_checker = RedundancyChecker(inventory_path=self.inventory_path, model_manager=self.model_manager, rag_engine=self.rag_engine)
+            self.conflict_checker = ConflictChecker(inventory_path=self.inventory_path, model_manager=self.model_manager, rag_engine=self.rag_engine)
 
             print("✅ All pipeline components initialized successfully!")
 

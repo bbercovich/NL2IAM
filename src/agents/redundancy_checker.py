@@ -49,17 +49,19 @@ class RedundancyChecker:
     - Returns errors if LLM is unavailable (research requirement)
     """
 
-    def __init__(self, inventory_path: Optional[str] = None, model_manager=None):
+    def __init__(self, inventory_path: Optional[str] = None, model_manager=None, rag_engine=None):
         """
         Initialize the redundancy checker.
 
         Args:
             inventory_path: Optional path to persistent policy inventory
             model_manager: Model manager for LLM-based analysis
+            rag_engine: RAG engine for AWS documentation context
         """
         self.inventory = PolicyInventory()
         self.inventory_path = inventory_path
         self.model_manager = model_manager
+        self.rag_engine = rag_engine
 
         # Load existing policies if inventory path provided
         if inventory_path and Path(inventory_path).exists():
@@ -356,97 +358,47 @@ class RedundancyChecker:
 
     def _llm_check_redundancy(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
         """
-        Use LLM to intelligently check for redundancy with proper principal analysis.
-        Optimized to batch multiple policies for efficiency.
+        Simple RAG-enhanced LLM redundancy checking.
         """
         redundancy_results = []
 
         if not self.model_manager:
             raise ValueError("Model manager is required for LLM-based redundancy checking. This research system requires LLM analysis.")
 
-        # Batch process policies in groups to reduce API calls
-        batch_size = 5  # Process 5 policies per LLM call
-
-        for i in range(0, len(existing_policies), batch_size):
-            batch = existing_policies[i:i+batch_size]
-
-            # Create prompt for batch analysis
-            prompt = self._create_batch_redundancy_analysis_prompt(new_policy, batch)
-
-            # Get LLM analysis for the batch
-            try:
-                response = self.model_manager.generate(
-                    'dsl2policy_model',
-                    prompt,
-                    max_new_tokens=400,  # More tokens for batch response
-                    temperature=0.1,
-                    top_p=0.9
-                )
-
-                # Parse batch response
-                batch_analyses = self._parse_batch_redundancy_response(response, batch)
-
-                # Process each analysis in the batch
-                for j, analysis in enumerate(batch_analyses):
-                    if analysis['is_redundant']:
-                        existing_policy_data = batch[j]
-                        from core.inventory import RedundancyResult
-                        redundancy_result = RedundancyResult(
-                            is_redundant=True,
-                            redundant_policy_id=existing_policy_data['id'],
-                            redundancy_type=analysis['redundancy_type'],
-                            explanation=analysis['explanation'],
-                            new_policy_statements=new_policy.get('Statement', []),
-                            existing_policy_statements=existing_policy_data['policy'].get('Statement', []),
-                            confidence_score=analysis['confidence_score']
-                        )
-                        redundancy_results.append(redundancy_result)
-
-            except Exception as e:
-                # Fallback to individual analysis for this batch
-                print(f"Warning: Batch analysis failed, falling back to individual analysis: {e}")
-                batch_results = self._individual_redundancy_check(new_policy, batch)
-                redundancy_results.extend(batch_results)
-
-        return redundancy_results
-
-    def _individual_redundancy_check(self, new_policy: Dict[str, Any], policies_batch: List[Dict[str, Any]]) -> List:
-        """
-        Fallback method for individual policy checking when batch fails.
-        """
-        redundancy_results = []
-
-        for existing_policy_data in policies_batch:
+        # Check each existing policy individually with RAG context
+        for existing_policy_data in existing_policies:
             existing_policy = existing_policy_data['policy']
             existing_name = existing_policy_data['name']
             existing_id = existing_policy_data['id']
 
-            # Create prompt for LLM analysis
-            prompt = self._create_redundancy_analysis_prompt(new_policy, existing_policy, existing_name)
+            # Get RAG context for these policies
+            rag_context = self._get_rag_context(new_policy, existing_policy)
 
-            # Get LLM analysis
+            # Create simple prompt with RAG context
+            prompt = self._create_simple_redundancy_prompt(new_policy, existing_policy, existing_name, rag_context)
+
             try:
                 response = self.model_manager.generate(
                     'dsl2policy_model',
                     prompt,
-                    max_new_tokens=200,
+                    max_new_tokens=300,
                     temperature=0.1,
                     top_p=0.9
                 )
 
-                # Parse LLM response
-                analysis = self._parse_redundancy_response(response)
+                # Parse simple response
+                is_redundant, explanation = self._parse_simple_response(response)
 
-                if analysis['is_redundant']:
+                if is_redundant:
                     from core.inventory import RedundancyResult
                     redundancy_result = RedundancyResult(
                         is_redundant=True,
                         redundant_policy_id=existing_id,
-                        redundancy_type=analysis['redundancy_type'],
-                        explanation=analysis['explanation'],
+                        redundancy_type="detected",
+                        explanation=explanation,
                         new_policy_statements=new_policy.get('Statement', []),
                         existing_policy_statements=existing_policy.get('Statement', []),
-                        confidence_score=analysis['confidence_score']
+                        confidence_score=0.9
                     )
                     redundancy_results.append(redundancy_result)
 
@@ -454,6 +406,78 @@ class RedundancyChecker:
                 raise RuntimeError(f"LLM analysis failed for policy {existing_name}: {e}. LLM-based analysis is required for this research system.")
 
         return redundancy_results
+
+    def _get_rag_context(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any]) -> str:
+        """Get RAG context for policy comparison."""
+        if not self.rag_engine:
+            return "No AWS documentation context available."
+
+        try:
+            # Create a query based on the policies' actions and resources
+            query_parts = []
+
+            # Extract actions from both policies
+            for policy in [new_policy, existing_policy]:
+                statements = policy.get('Statement', [])
+                if isinstance(statements, dict):
+                    statements = [statements]
+
+                for stmt in statements:
+                    actions = stmt.get('Action', [])
+                    if isinstance(actions, str):
+                        actions = [actions]
+                    query_parts.extend(actions[:2])  # Take first 2 actions to keep query focused
+
+            query = " ".join(query_parts[:4])  # Limit query length
+
+            # Get RAG context
+            retrieval_result = self.rag_engine.retrieve_context(query)
+            return retrieval_result.augmented_prompt
+
+        except Exception as e:
+            print(f"Warning: RAG context retrieval failed: {e}")
+            return "AWS documentation context unavailable."
+
+    def _create_simple_redundancy_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str, rag_context: str) -> str:
+        """Create a simple, clear redundancy analysis prompt."""
+        return f"""You are an AWS IAM policy expert. Analyze if the NEW policy is redundant with the EXISTING policy.
+
+A policy is redundant if the NEW policy grants permissions that are already granted by the EXISTING policy.
+
+EXISTING POLICY ({existing_name}):
+{json.dumps(existing_policy, indent=2)}
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+
+AWS DOCUMENTATION CONTEXT:
+{rag_context}
+
+Based on your AWS IAM expertise and the documentation context, is the NEW policy redundant with the EXISTING policy?
+
+Answer with:
+REDUNDANT: YES or NO
+EXPLANATION: [Clear explanation of why it is or isn't redundant]
+"""
+
+    def _parse_simple_response(self, response: str) -> Tuple[bool, str]:
+        """Parse the simple LLM response."""
+        is_redundant = False
+        explanation = "No redundancy detected"
+
+        try:
+            lines = response.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('REDUNDANT:'):
+                    redundant_val = line.split(':', 1)[1].strip().upper()
+                    is_redundant = redundant_val in ['YES', 'TRUE']
+                elif line.startswith('EXPLANATION:'):
+                    explanation = line.split(':', 1)[1].strip()
+        except Exception as e:
+            print(f"Warning: Failed to parse response: {e}")
+
+        return is_redundant, explanation
 
     def _create_redundancy_analysis_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str) -> str:
         """

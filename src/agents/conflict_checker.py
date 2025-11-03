@@ -51,17 +51,19 @@ class ConflictChecker:
     - Returns errors if LLM is unavailable (research requirement)
     """
 
-    def __init__(self, inventory_path: Optional[str] = None, model_manager=None):
+    def __init__(self, inventory_path: Optional[str] = None, model_manager=None, rag_engine=None):
         """
         Initialize the conflict checker.
 
         Args:
             inventory_path: Optional path to persistent policy inventory
             model_manager: Model manager for LLM-based analysis
+            rag_engine: RAG engine for AWS documentation context
         """
         self.inventory = PolicyInventory()
         self.inventory_path = inventory_path
         self.model_manager = model_manager
+        self.rag_engine = rag_engine
 
         # Load existing policies if inventory path provided
         if inventory_path and Path(inventory_path).exists():
@@ -343,103 +345,50 @@ class ConflictChecker:
 
     def _llm_check_conflicts(self, new_policy: Dict[str, Any], existing_policies: List[Dict[str, Any]]) -> List:
         """
-        Use LLM to intelligently check for conflicts with proper ALLOW/DENY logic.
-        Optimized to batch multiple policies for efficiency.
+        Simple RAG-enhanced LLM conflict checking.
         """
         conflict_results = []
 
         if not self.model_manager:
             raise ValueError("Model manager is required for LLM-based conflict checking. This research system requires LLM analysis.")
 
-        # Batch process policies in groups to reduce API calls
-        batch_size = 5  # Process 5 policies per LLM call
-
-        for i in range(0, len(existing_policies), batch_size):
-            batch = existing_policies[i:i+batch_size]
-
-            # Create prompt for batch analysis
-            prompt = self._create_batch_conflict_analysis_prompt(new_policy, batch)
-
-            # Get LLM analysis for the batch
-            try:
-                response = self.model_manager.generate(
-                    'dsl2policy_model',
-                    prompt,
-                    max_new_tokens=400,  # More tokens for batch response
-                    temperature=0.1,
-                    top_p=0.9
-                )
-
-                # Parse batch response
-                batch_analyses = self._parse_batch_conflict_response(response, batch)
-
-                # Process each analysis in the batch
-                for j, analysis in enumerate(batch_analyses):
-                    if analysis['has_conflict']:
-                        existing_policy_data = batch[j]
-                        from core.inventory import ConflictResult
-                        conflict_result = ConflictResult(
-                            has_conflict=True,
-                            conflicting_policy_id=existing_policy_data['id'],
-                            conflict_type=analysis['conflict_type'],
-                            explanation=analysis['explanation'],
-                            conflicting_statements=[],
-                            affected_actions=set(analysis.get('affected_actions', [])),
-                            affected_resources=set(analysis.get('affected_resources', [])),
-                            affected_principals=set(analysis.get('affected_principals', [])),
-                            severity=analysis['severity'],
-                            confidence_score=analysis['confidence_score']
-                        )
-                        conflict_results.append(conflict_result)
-
-            except Exception as e:
-                # Fallback to individual analysis for this batch
-                print(f"Warning: Batch analysis failed, falling back to individual analysis: {e}")
-                batch_results = self._individual_conflict_check(new_policy, batch)
-                conflict_results.extend(batch_results)
-
-        return conflict_results
-
-    def _individual_conflict_check(self, new_policy: Dict[str, Any], policies_batch: List[Dict[str, Any]]) -> List:
-        """
-        Fallback method for individual policy checking when batch fails.
-        """
-        conflict_results = []
-
-        for existing_policy_data in policies_batch:
+        # Check each existing policy individually with RAG context
+        for existing_policy_data in existing_policies:
             existing_policy = existing_policy_data['policy']
             existing_name = existing_policy_data['name']
             existing_id = existing_policy_data['id']
 
-            # Create prompt for LLM analysis
-            prompt = self._create_conflict_analysis_prompt(new_policy, existing_policy, existing_name)
+            # Get RAG context for these policies
+            rag_context = self._get_rag_context(new_policy, existing_policy)
 
-            # Get LLM analysis
+            # Create simple prompt with RAG context
+            prompt = self._create_simple_conflict_prompt(new_policy, existing_policy, existing_name, rag_context)
+
             try:
                 response = self.model_manager.generate(
                     'dsl2policy_model',
                     prompt,
-                    max_new_tokens=200,
+                    max_new_tokens=300,
                     temperature=0.1,
                     top_p=0.9
                 )
 
-                # Parse LLM response
-                analysis = self._parse_conflict_response(response)
+                # Parse simple response
+                has_conflict, explanation = self._parse_simple_response(response)
 
-                if analysis['has_conflict']:
+                if has_conflict:
                     from core.inventory import ConflictResult
                     conflict_result = ConflictResult(
                         has_conflict=True,
                         conflicting_policy_id=existing_id,
-                        conflict_type=analysis['conflict_type'],
-                        explanation=analysis['explanation'],
+                        conflict_type="detected",
+                        explanation=explanation,
                         conflicting_statements=[],
-                        affected_actions=set(analysis.get('affected_actions', [])),
-                        affected_resources=set(analysis.get('affected_resources', [])),
-                        affected_principals=set(analysis.get('affected_principals', [])),
-                        severity=analysis['severity'],
-                        confidence_score=analysis['confidence_score']
+                        affected_actions=set(),
+                        affected_resources=set(),
+                        affected_principals=set(),
+                        severity="medium",
+                        confidence_score=0.9
                     )
                     conflict_results.append(conflict_result)
 
@@ -447,6 +396,80 @@ class ConflictChecker:
                 raise RuntimeError(f"LLM analysis failed for policy {existing_name}: {e}. LLM-based analysis is required for this research system.")
 
         return conflict_results
+
+    def _get_rag_context(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any]) -> str:
+        """Get RAG context for policy comparison."""
+        if not self.rag_engine:
+            return "No AWS documentation context available."
+
+        try:
+            # Create a query based on the policies' actions and resources
+            query_parts = []
+
+            # Extract actions from both policies
+            for policy in [new_policy, existing_policy]:
+                statements = policy.get('Statement', [])
+                if isinstance(statements, dict):
+                    statements = [statements]
+
+                for stmt in statements:
+                    actions = stmt.get('Action', [])
+                    if isinstance(actions, str):
+                        actions = [actions]
+                    query_parts.extend(actions[:2])  # Take first 2 actions to keep query focused
+
+            query = " ".join(query_parts[:4])  # Limit query length
+
+            # Get RAG context
+            retrieval_result = self.rag_engine.retrieve_context(query)
+            return retrieval_result.augmented_prompt
+
+        except Exception as e:
+            print(f"Warning: RAG context retrieval failed: {e}")
+            return "AWS documentation context unavailable."
+
+    def _create_simple_conflict_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str, rag_context: str) -> str:
+        """Create a simple, clear conflict analysis prompt."""
+        return f"""You are an AWS IAM policy expert. Analyze if the NEW policy conflicts with the EXISTING policy.
+
+A conflict occurs when:
+- NEW policy ALLOWS actions that EXISTING policy DENIES for the same or overlapping principals/resources
+- NEW policy DENIES actions that EXISTING policy ALLOWS for the same or overlapping principals/resources
+
+EXISTING POLICY ({existing_name}):
+{json.dumps(existing_policy, indent=2)}
+
+NEW POLICY:
+{json.dumps(new_policy, indent=2)}
+
+AWS DOCUMENTATION CONTEXT:
+{rag_context}
+
+Based on your AWS IAM expertise and the documentation context, do these policies conflict?
+
+Answer with:
+CONFLICT: YES or NO
+EXPLANATION: [Clear explanation of why they do or don't conflict]
+"""
+
+    def _parse_simple_response(self, response: str) -> Tuple[bool, str]:
+        """Parse the simple LLM response."""
+        has_conflict = False
+        explanation = "No conflicts detected"
+
+        try:
+            lines = response.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('CONFLICT:'):
+                    conflict_val = line.split(':', 1)[1].strip().upper()
+                    has_conflict = conflict_val in ['YES', 'TRUE']
+                elif line.startswith('EXPLANATION:'):
+                    explanation = line.split(':', 1)[1].strip()
+        except Exception as e:
+            print(f"Warning: Failed to parse response: {e}")
+
+        return has_conflict, explanation
 
     def _create_conflict_analysis_prompt(self, new_policy: Dict[str, Any], existing_policy: Dict[str, Any], existing_name: str) -> str:
         """
