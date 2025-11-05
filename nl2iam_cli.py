@@ -36,6 +36,8 @@ try:
     from models.model_manager import create_default_manager
     from agents.translator import NLToTranslator
     from agents.policy_generator import PolicyGenerator
+    from agents.policy_validator import PolicyValidator
+    from agents.risk_assessor import RiskAssessor
     from agents.redundancy_checker import RedundancyChecker
     from agents.conflict_checker import ConflictChecker
     from rag.rag_engine import RAGEngine
@@ -68,6 +70,8 @@ class NL2IAMSession:
         self.model_manager = None
         self.translator = None
         self.policy_generator = None
+        self.policy_validator = None
+        self.risk_assessor = None
         self.redundancy_checker = None
         self.conflict_checker = None
         self.rag_engine = None
@@ -143,6 +147,14 @@ class NL2IAMSession:
             self.policy_generator = PolicyGenerator(
                 model_manager=self.model_manager,
                 rag_engine=self.rag_engine if self.use_rag_policy else None
+            )
+            self.policy_validator = PolicyValidator(
+                model_manager=self.model_manager,
+                rag_engine=self.rag_engine
+            )
+            self.risk_assessor = RiskAssessor(
+                model_manager=self.model_manager,
+                rag_engine=self.rag_engine
             )
             self.redundancy_checker = RedundancyChecker(inventory_path=self.inventory_path, model_manager=self.model_manager, rag_engine=self.rag_engine)
             self.conflict_checker = ConflictChecker(inventory_path=self.inventory_path, model_manager=self.model_manager, rag_engine=self.rag_engine)
@@ -538,9 +550,77 @@ class NL2IAMSession:
                 else:
                     print("   Please enter 'y' (yes), 'n' (no), or 'edit'")
 
-        # Step 3: Redundancy Check (if validation is enabled)
+        # Step 3: JSON IAM Policy Validation
+        print(f"\n🔍 Step 3: Validating IAM policy JSON structure...")
+
+        validation_result = self.policy_validator.validate_policy(candidate_policy, max_fix_attempts=2)
+
+        if not validation_result.is_valid:
+            if validation_result.fixed_policy:
+                print(f"⚠️  Policy had validation errors but was automatically fixed (attempt {validation_result.attempt_count})")
+                for error in validation_result.errors:
+                    print(f"   ❌ {error}")
+                print("\n📄 Corrected Policy:")
+                print(json.dumps(validation_result.fixed_policy, indent=2))
+                candidate_policy = validation_result.fixed_policy
+                print("✅ Using corrected policy")
+            else:
+                print("❌ Policy validation failed and could not be automatically fixed")
+                for error in validation_result.errors:
+                    print(f"   ❌ {error}")
+                print("Please try again with a different natural language description.")
+                return False
+        else:
+            print("✅ Policy passed JSON validation")
+            if validation_result.warnings:
+                for warning in validation_result.warnings:
+                    print(f"   ⚠️  {warning}")
+
+        # Step 4: Risk Assessment and Policy Explanation
+        print(f"\n📊 Step 4: Performing risk assessment and generating explanation...")
+
+        risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+
+        if not risk_result.success:
+            print(f"⚠️  Risk assessment failed: {risk_result.error_message}")
+            print("Proceeding without risk assessment...")
+        else:
+            # Show policy explanation
+            print("\n📝 Policy Explanation:")
+            print(f"   📋 Summary: {risk_result.policy_explanation.summary}")
+            print(f"   👤 Who: {risk_result.policy_explanation.principal_explanation}")
+            print(f"   🎯 Resources: {risk_result.policy_explanation.resource_explanation}")
+            if risk_result.policy_explanation.conditions_explanation:
+                print(f"   ⚙️  Conditions: {risk_result.policy_explanation.conditions_explanation}")
+
+            print(f"\n   📋 Detailed permissions:")
+            for permission in risk_result.policy_explanation.detailed_breakdown:
+                print(f"      • {permission}")
+
+            # Show risk assessment
+            print(f"\n🚨 Risk Assessment:")
+            print(f"   📊 Risk Level: {risk_result.overall_risk_level.value.upper()}")
+            print(f"   📈 Risk Score: {risk_result.risk_score:.1f}/100")
+
+            if risk_result.risk_factors:
+                print(f"\n   ⚠️  Risk Factors:")
+                for factor in risk_result.risk_factors:
+                    print(f"      • {factor.factor_type}: {factor.description}")
+                    print(f"        Risk Level: {factor.risk_level.value.upper()}")
+
+            if risk_result.security_recommendations:
+                print(f"\n   💡 Security Recommendations:")
+                for rec in risk_result.security_recommendations[:5]:  # Show top 5
+                    print(f"      • {rec}")
+
+            if risk_result.compliance_notes:
+                print(f"\n   📋 Compliance Notes:")
+                for note in risk_result.compliance_notes:
+                    print(f"      • {note}")
+
+        # Step 5: Redundancy Check (if validation is enabled)
         if not self.skip_validation:
-            print(f"\n🔍 Step 3: Checking for redundancy...")
+            print(f"\n🔍 Step 5: Checking for redundancy...")
 
             redundancy_result = self.redundancy_checker.check_redundancy(
                 candidate_policy,
@@ -592,8 +672,8 @@ class NL2IAMSession:
             else:
                 print("✅ No redundancy detected")
 
-            # Step 4: Conflict Check
-            print(f"\n⚔️  Step 4: Checking for conflicts...")
+            # Step 6: Conflict Check
+            print(f"\n⚔️  Step 6: Checking for conflicts...")
 
             conflict_result = self.conflict_checker.check_conflicts(
                 candidate_policy,
@@ -647,10 +727,10 @@ class NL2IAMSession:
             else:
                 print("✅ No conflicts detected")
         else:
-            print("\n⚠️  Steps 3-4: Validation checks skipped (--skip-validation flag enabled)")
+            print("\n⚠️  Steps 5-6: Validation checks skipped (--skip-validation flag enabled)")
 
-        # Step 3/5: Add to Policy Inventory (Step number depends on whether validation was skipped)
-        final_step = "3" if self.skip_validation else "5"
+        # Step 5/7: Add to Policy Inventory (Step number depends on whether validation was skipped)
+        final_step = "5" if self.skip_validation else "7"
         print(f"\n💾 Step {final_step}: Adding policy to inventory...")
 
         policy_name = f"NL2IAM-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -847,7 +927,25 @@ TASK: Generate a new AWS IAM policy that incorporates the modification instructi
 
             candidate_policy = policy_result.policy
 
-            # Step 3-4: Validation (if enabled)
+            # Step 3: JSON IAM Policy Validation
+            validation_result = self.policy_validator.validate_policy(candidate_policy, max_fix_attempts=2)
+            if not validation_result.is_valid:
+                if validation_result.fixed_policy:
+                    candidate_policy = validation_result.fixed_policy
+                else:
+                    return {
+                        'success': False,
+                        'error': f"Policy validation failed: {'; '.join(validation_result.errors)}",
+                        'generation_time': (datetime.now() - start_time).total_seconds()
+                    }
+
+            # Step 4: Risk Assessment (non-blocking in batch mode)
+            try:
+                risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Batch-{filename}")
+            except Exception:
+                risk_result = None  # Don't fail batch processing for risk assessment errors
+
+            # Step 5-6: Validation (if enabled)
             if not self.skip_validation:
                 # Redundancy check
                 redundancy_result = self.redundancy_checker.check_redundancy(
@@ -876,7 +974,7 @@ TASK: Generate a new AWS IAM policy that incorporates the modification instructi
                         'generation_time': (datetime.now() - start_time).total_seconds()
                     }
 
-            # Step 5: Add to inventory (optional in batch mode)
+            # Step 7: Add to inventory (optional in batch mode)
             policy_name = f"NL2IAM-Batch-{filename}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
             policy_description = f"Generated from batch file {filename}: {natural_language[:100]}..."
 
@@ -898,7 +996,10 @@ TASK: Generate a new AWS IAM policy that incorporates the modification instructi
                 'policy_id': policy_id,
                 'dsl': dsl_output,
                 'generation_time': generation_time,
-                'rag_contexts': len(policy_result.retrieved_contexts) if policy_result.retrieved_contexts else 0
+                'rag_contexts': len(policy_result.retrieved_contexts) if policy_result.retrieved_contexts else 0,
+                'validation_fixed': validation_result.fixed_policy is not None if validation_result else False,
+                'risk_score': risk_result.risk_score if risk_result and risk_result.success else None,
+                'risk_level': risk_result.overall_risk_level.value if risk_result and risk_result.success else None
             }
 
         except Exception as e:
