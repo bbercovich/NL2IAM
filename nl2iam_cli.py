@@ -576,51 +576,9 @@ class NL2IAMSession:
                 for warning in validation_result.warnings:
                     print(f"   ⚠️  {warning}")
 
-        # Step 4: Risk Assessment and Policy Explanation
-        print(f"\n📊 Step 4: Performing risk assessment and generating explanation...")
-
-        risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
-
-        if not risk_result.success:
-            print(f"⚠️  Risk assessment failed: {risk_result.error_message}")
-            print("Proceeding without risk assessment...")
-        else:
-            # Show policy explanation
-            print("\n📝 Policy Explanation:")
-            print(f"   📋 Summary: {risk_result.policy_explanation.summary}")
-            print(f"   👤 Who: {risk_result.policy_explanation.principal_explanation}")
-            print(f"   🎯 Resources: {risk_result.policy_explanation.resource_explanation}")
-            if risk_result.policy_explanation.conditions_explanation:
-                print(f"   ⚙️  Conditions: {risk_result.policy_explanation.conditions_explanation}")
-
-            print(f"\n   📋 Detailed permissions:")
-            for permission in risk_result.policy_explanation.detailed_breakdown:
-                print(f"      • {permission}")
-
-            # Show risk assessment
-            print(f"\n🚨 Risk Assessment:")
-            print(f"   📊 Risk Level: {risk_result.overall_risk_level.value.upper()}")
-            print(f"   📈 Risk Score: {risk_result.risk_score:.1f}/100")
-
-            if risk_result.risk_factors:
-                print(f"\n   ⚠️  Risk Factors:")
-                for factor in risk_result.risk_factors:
-                    print(f"      • {factor.factor_type}: {factor.description}")
-                    print(f"        Risk Level: {factor.risk_level.value.upper()}")
-
-            if risk_result.security_recommendations:
-                print(f"\n   💡 Security Recommendations:")
-                for rec in risk_result.security_recommendations[:5]:  # Show top 5
-                    print(f"      • {rec}")
-
-            if risk_result.compliance_notes:
-                print(f"\n   📋 Compliance Notes:")
-                for note in risk_result.compliance_notes:
-                    print(f"      • {note}")
-
-        # Step 5: Redundancy Check (if validation is enabled)
+        # Step 4: Redundancy Check (if validation is enabled)
         if not self.skip_validation:
-            print(f"\n🔍 Step 5: Checking for redundancy...")
+            print(f"\n🔍 Step 4: Checking for redundancy...")
 
             redundancy_result = self.redundancy_checker.check_redundancy(
                 candidate_policy,
@@ -672,8 +630,8 @@ class NL2IAMSession:
             else:
                 print("✅ No redundancy detected")
 
-            # Step 6: Conflict Check
-            print(f"\n⚔️  Step 6: Checking for conflicts...")
+            # Step 5: Conflict Check
+            print(f"\n⚔️  Step 5: Checking for conflicts...")
 
             conflict_result = self.conflict_checker.check_conflicts(
                 candidate_policy,
@@ -727,7 +685,50 @@ class NL2IAMSession:
             else:
                 print("✅ No conflicts detected")
         else:
-            print("\n⚠️  Steps 5-6: Validation checks skipped (--skip-validation flag enabled)")
+            print("\n⚠️  Steps 4-5: Validation checks skipped (--skip-validation flag enabled)")
+
+        # Step 6: Risk Assessment and Policy Explanation
+        risk_step = "4" if self.skip_validation else "6"
+        print(f"\n📊 Step {risk_step}: Performing risk assessment and generating explanation...")
+
+        risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Policy-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+
+        if not risk_result.success:
+            print(f"⚠️  Risk assessment failed: {risk_result.error_message}")
+            print("Proceeding without risk assessment...")
+        else:
+            # Show policy explanation
+            print("\n📝 Policy Explanation:")
+            print(f"   📋 Summary: {risk_result.policy_explanation.summary}")
+            print(f"   👤 Who: {risk_result.policy_explanation.principal_explanation}")
+            print(f"   🎯 Resources: {risk_result.policy_explanation.resource_explanation}")
+            if risk_result.policy_explanation.conditions_explanation:
+                print(f"   ⚙️  Conditions: {risk_result.policy_explanation.conditions_explanation}")
+
+            print(f"\n   📋 Detailed permissions:")
+            for permission in risk_result.policy_explanation.detailed_breakdown:
+                print(f"      • {permission}")
+
+            # Show risk assessment
+            print(f"\n🚨 Risk Assessment:")
+            print(f"   📊 Risk Level: {risk_result.overall_risk_level.value.upper()}")
+            print(f"   📈 Risk Score: {risk_result.risk_score:.1f}/100")
+
+            if risk_result.risk_factors:
+                print(f"\n   ⚠️  Risk Factors:")
+                for factor in risk_result.risk_factors:
+                    print(f"      • {factor.factor_type}: {factor.description}")
+                    print(f"        Risk Level: {factor.risk_level.value.upper()}")
+
+            if risk_result.security_recommendations:
+                print(f"\n   💡 Security Recommendations:")
+                for rec in risk_result.security_recommendations[:5]:  # Show top 5
+                    print(f"      • {rec}")
+
+            if risk_result.compliance_notes:
+                print(f"\n   📋 Compliance Notes:")
+                for note in risk_result.compliance_notes:
+                    print(f"      • {note}")
 
         # Step 5/7: Add to Policy Inventory (Step number depends on whether validation was skipped)
         final_step = "5" if self.skip_validation else "7"
@@ -939,13 +940,7 @@ TASK: Generate a new AWS IAM policy that incorporates the modification instructi
                         'generation_time': (datetime.now() - start_time).total_seconds()
                     }
 
-            # Step 4: Risk Assessment (non-blocking in batch mode)
-            try:
-                risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Batch-{filename}")
-            except Exception:
-                risk_result = None  # Don't fail batch processing for risk assessment errors
-
-            # Step 5-6: Validation (if enabled)
+            # Step 4-5: Validation (if enabled)
             if not self.skip_validation:
                 # Redundancy check
                 redundancy_result = self.redundancy_checker.check_redundancy(
@@ -973,6 +968,12 @@ TASK: Generate a new AWS IAM policy that incorporates the modification instructi
                         'error': f"Conflict check failed: {conflict_result.error_message}",
                         'generation_time': (datetime.now() - start_time).total_seconds()
                     }
+
+            # Step 6: Risk Assessment (non-blocking in batch mode)
+            try:
+                risk_result = self.risk_assessor.assess_policy(candidate_policy, policy_name=f"Batch-{filename}")
+            except Exception:
+                risk_result = None  # Don't fail batch processing for risk assessment errors
 
             # Step 7: Add to inventory (optional in batch mode)
             policy_name = f"NL2IAM-Batch-{filename}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
